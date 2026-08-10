@@ -30,7 +30,7 @@ import { GroupChat } from "./screens/chat/GroupChat";
 export default function App() {
   return (
     <UIProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/" element={<Splash />} />
           <Route path="/login" element={<Login />} />
