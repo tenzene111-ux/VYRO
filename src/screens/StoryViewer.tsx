@@ -108,7 +108,7 @@ export function StoryViewer() {
 
       <div className="relative z-10 flex items-center justify-between px-3 pt-3">
         <div className="flex items-center gap-2.5">
-          <Avatar name={author.name} size={36} />
+          <Avatar name={author.name} avatarUrl={author.avatar_url} size={36} />
           <div>
             <p className="text-[13px] font-semibold text-white">{author.name}</p>
             <p className="text-[11px] text-white/70">{timeAgo(current.created_at)}</p>

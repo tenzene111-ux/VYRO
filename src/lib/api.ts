@@ -5,6 +5,7 @@ import type { Database } from "./database.types";
 export type FeedPost = {
   id: string;
   text: string;
+  image_url: string | null;
   created_at: string;
   author: Profile;
   like_count: number;
@@ -25,20 +26,62 @@ export async function getProfile(id: string): Promise<Profile | null> {
   return data ?? null;
 }
 
-export async function updateProfile(id: string, patch: { name?: string; bio?: string; location?: string }) {
+export async function updateProfile(
+  id: string,
+  patch: { name?: string; bio?: string; location?: string; avatar_url?: string }
+) {
   const { error } = await supabase.from("profiles").update(patch).eq("id", id);
   if (error) throw error;
 }
 
-export async function createPost(authorId: string, text: string) {
-  const { error } = await supabase.from("posts").insert({ author_id: authorId, text });
+export async function createPost(authorId: string, text: string, imageUrl?: string) {
+  const { error } = await supabase.from("posts").insert({ author_id: authorId, text, image_url: imageUrl ?? null });
   if (error) throw error;
+}
+
+function hydrateFeedPosts(
+  posts: { id: string; text: string; image_url: string | null; created_at: string; author_id: string }[],
+  authors: Profile[],
+  likes: { post_id: string; user_id: string }[],
+  comments: { post_id: string }[],
+  currentUserId: string
+): FeedPost[] {
+  const authorById = new Map(authors.map((a) => [a.id, a]));
+  const likesByPost = new Map<string, { count: number; mine: boolean }>();
+  for (const l of likes) {
+    const cur = likesByPost.get(l.post_id) ?? { count: 0, mine: false };
+    cur.count += 1;
+    if (l.user_id === currentUserId) cur.mine = true;
+    likesByPost.set(l.post_id, cur);
+  }
+  const commentsByPost = new Map<string, number>();
+  for (const c of comments) {
+    commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) ?? 0) + 1);
+  }
+
+  return posts
+    .map((p) => {
+      const author = authorById.get(p.author_id);
+      if (!author) return null;
+      const likeInfo = likesByPost.get(p.id) ?? { count: 0, mine: false };
+      return {
+        id: p.id,
+        text: p.text,
+        image_url: p.image_url,
+        created_at: p.created_at,
+        author,
+        like_count: likeInfo.count,
+        comment_count: commentsByPost.get(p.id) ?? 0,
+        liked_by_me: likeInfo.mine,
+      };
+    })
+    .filter((p): p is FeedPost => p !== null);
 }
 
 export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> {
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, text, created_at, author_id")
+    .select("id, text, image_url, created_at, author_id")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -53,35 +96,47 @@ export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> 
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
   ]);
 
-  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
-  const likesByPost = new Map<string, { count: number; mine: boolean }>();
-  for (const l of likes ?? []) {
-    const cur = likesByPost.get(l.post_id) ?? { count: 0, mine: false };
-    cur.count += 1;
-    if (l.user_id === currentUserId) cur.mine = true;
-    likesByPost.set(l.post_id, cur);
-  }
-  const commentsByPost = new Map<string, number>();
-  for (const c of comments ?? []) {
-    commentsByPost.set(c.post_id, (commentsByPost.get(c.post_id) ?? 0) + 1);
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId);
+}
+
+export async function listTopPosts(currentUserId: string, limit = 5): Promise<FeedPost[]> {
+  const all = await listFeedPosts(currentUserId);
+  return [...all].sort((a, b) => b.like_count - a.like_count).slice(0, limit);
+}
+
+export async function searchPeopleAndPosts(
+  currentUserId: string,
+  query: string
+): Promise<{ people: Profile[]; posts: FeedPost[] }> {
+  const q = query.trim();
+  if (!q) return { people: [], posts: [] };
+
+  const [{ data: people }, { data: posts }] = await Promise.all([
+    supabase.from("profiles").select("*").or(`name.ilike.%${q}%,username.ilike.%${q}%`).neq("id", currentUserId).limit(20),
+    supabase
+      .from("posts")
+      .select("id, text, image_url, created_at, author_id")
+      .ilike("text", `%${q}%`)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  if (!posts || posts.length === 0) {
+    return { people: people ?? [], posts: [] };
   }
 
-  return posts
-    .map((p) => {
-      const author = authorById.get(p.author_id);
-      if (!author) return null;
-      const likeInfo = likesByPost.get(p.id) ?? { count: 0, mine: false };
-      return {
-        id: p.id,
-        text: p.text,
-        created_at: p.created_at,
-        author,
-        like_count: likeInfo.count,
-        comment_count: commentsByPost.get(p.id) ?? 0,
-        liked_by_me: likeInfo.mine,
-      };
-    })
-    .filter((p): p is FeedPost => p !== null);
+  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const postIds = posts.map((p) => p.id);
+  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIds),
+    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_comments").select("post_id").in("post_id", postIds),
+  ]);
+
+  return {
+    people: people ?? [],
+    posts: hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId),
+  };
 }
 
 export type Comment = {
@@ -169,12 +224,12 @@ export async function countPosts(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-export type SimplePost = { id: string; text: string; created_at: string };
+export type SimplePost = { id: string; text: string; image_url: string | null; created_at: string };
 
 export async function listPostsByAuthor(authorId: string): Promise<SimplePost[]> {
   const { data, error } = await supabase
     .from("posts")
-    .select("id, text, created_at")
+    .select("id, text, image_url, created_at")
     .eq("author_id", authorId)
     .order("created_at", { ascending: false });
   if (error) throw error;

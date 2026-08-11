@@ -49,7 +49,7 @@ export function Conversation() {
         <button onClick={() => navigate(-1)} className="rounded-full p-1.5 text-mist hover:text-ink">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <Avatar name={other?.name ?? "…"} size={40} />
+        <Avatar name={other?.name ?? "…"} avatarUrl={other?.avatar_url} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{other?.name ?? "Loading…"}</p>
           <p className="text-[11px] text-mist">@{other?.username ?? ""}</p>

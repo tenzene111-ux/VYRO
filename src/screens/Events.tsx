@@ -91,7 +91,7 @@ export function Events() {
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <Avatar name={e.host.name} size={20} />
+                      <Avatar name={e.host.name} avatarUrl={e.host.avatar_url} size={20} />
                       <span className="text-[11px] text-mist">
                         Hosted by {e.host.name} · {e.going_count} going
                       </span>

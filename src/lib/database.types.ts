@@ -12,6 +12,7 @@ export type Database = {
           location: string | null;
           verified: boolean;
           coins: number;
+          avatar_url: string | null;
           created_at: string;
         };
         Insert: {
@@ -22,6 +23,7 @@ export type Database = {
           location?: string | null;
           verified?: boolean;
           coins?: number;
+          avatar_url?: string | null;
           created_at?: string;
         };
         Update: {
@@ -32,6 +34,7 @@ export type Database = {
           location?: string | null;
           verified?: boolean;
           coins?: number;
+          avatar_url?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -41,18 +44,21 @@ export type Database = {
           id: string;
           author_id: string;
           text: string;
+          image_url: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           author_id: string;
           text: string;
+          image_url?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           author_id?: string;
           text?: string;
+          image_url?: string | null;
           created_at?: string;
         };
         Relationships: [];

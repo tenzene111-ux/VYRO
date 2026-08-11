@@ -55,7 +55,7 @@ export function PostCard({ post }: { post: FeedPost }) {
     <article className="overflow-hidden rounded-3xl glass-card animate-rise">
       <div className="flex items-center gap-3 px-4 pt-4">
         <button onClick={() => navigate(`/profile/${post.author.id}`)}>
-          <Avatar name={post.author.name} size={40} />
+          <Avatar name={post.author.name} avatarUrl={post.author.avatar_url} size={40} />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
@@ -78,7 +78,13 @@ export function PostCard({ post }: { post: FeedPost }) {
         </button>
       </div>
 
-      <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>
+      {post.text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>}
+
+      {post.image_url && (
+        <div className="mx-4 mt-3 overflow-hidden rounded-2xl">
+          <img src={post.image_url} alt="" className="max-h-[480px] w-full object-cover" />
+        </div>
+      )}
 
       <div className="flex items-center justify-between px-4 pt-3 text-[12px] text-mist">
         <span>{likeCount > 0 && `${formatCount(likeCount)} ${likeCount === 1 ? "like" : "likes"}`}</span>

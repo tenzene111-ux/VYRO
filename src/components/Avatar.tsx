@@ -8,12 +8,14 @@ function initials(name: string) {
 
 export function Avatar({
   name,
+  avatarUrl,
   size = 44,
   online,
   ring,
   className,
 }: {
   name: string;
+  avatarUrl?: string | null;
   size?: number;
   online?: boolean;
   ring?: "story" | "story-seen" | "live" | boolean;
@@ -37,18 +39,31 @@ export function Avatar({
       className={clsx("relative inline-flex shrink-0 items-center justify-center rounded-full", className)}
       style={{ width: outer, height: outer, background: ring ? ringBg : "transparent" }}
     >
-      <div
-        className="flex items-center justify-center rounded-full font-display font-semibold text-white"
-        style={{
-          width: size,
-          height: size,
-          background: `linear-gradient(135deg, ${from}, ${to})`,
-          fontSize: size * 0.36,
-          border: ring ? "2.5px solid #050510" : "1px solid rgba(255,255,255,0.12)",
-        }}
-      >
-        {initials(name)}
-      </div>
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={name}
+          className="rounded-full object-cover"
+          style={{
+            width: size,
+            height: size,
+            border: ring ? "2.5px solid #050510" : "1px solid rgba(255,255,255,0.12)",
+          }}
+        />
+      ) : (
+        <div
+          className="flex items-center justify-center rounded-full font-display font-semibold text-white"
+          style={{
+            width: size,
+            height: size,
+            background: `linear-gradient(135deg, ${from}, ${to})`,
+            fontSize: size * 0.36,
+            border: ring ? "2.5px solid #050510" : "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          {initials(name)}
+        </div>
+      )}
       {online && (
         <span
           className="absolute rounded-full border-2 border-void bg-emerald-400"

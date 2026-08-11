@@ -43,7 +43,7 @@ export function Home() {
             <Bell className="h-5 w-5" />
           </IconBtn>
           <button onClick={() => navigate("/profile")} className="ml-1">
-            <Avatar name={profile?.name ?? "You"} size={32} />
+            <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={32} />
           </button>
         </div>
       </header>
@@ -61,7 +61,7 @@ export function Home() {
             onClick={() => navigate(`/stories/${author.id}`)}
             className="flex w-16 shrink-0 flex-col items-center gap-1.5"
           >
-            <Avatar name={author.name} size={54} ring={seen ? "story-seen" : "story"} />
+            <Avatar name={author.name} avatarUrl={author.avatar_url} size={54} ring={seen ? "story-seen" : "story"} />
             <span className="w-16 truncate text-center text-[11px] text-mist">{author.name.split(" ")[0]}</span>
           </button>
         ))}
@@ -71,7 +71,7 @@ export function Home() {
         onClick={() => navigate("/create/post")}
         className="mb-4 flex w-full items-center gap-3 rounded-2xl glass-card px-4 py-3.5 text-left"
       >
-        <Avatar name={profile?.name ?? "You"} size={34} />
+        <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={34} />
         <span className="text-[13.5px] text-mist">What's on your mind?</span>
         <span className="ml-auto flex h-8 w-8 items-center justify-center rounded-full grad-primary">
           <Plus className="h-4 w-4 text-white" />

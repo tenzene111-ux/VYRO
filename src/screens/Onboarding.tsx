@@ -89,7 +89,7 @@ export function Onboarding() {
               const active = followed.includes(u.id);
               return (
                 <div key={u.id} className="flex items-center gap-3 rounded-2xl glass-card p-3">
-                  <Avatar name={u.name} size={44} />
+                  <Avatar name={u.name} avatarUrl={u.avatar_url} size={44} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-ink">{u.name}</p>
                     <p className="text-[11px] text-mist">@{u.username}</p>

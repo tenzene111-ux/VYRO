@@ -80,7 +80,7 @@ export function PeopleTab() {
             {followingList.map((u) => (
               <div key={u.id} className="flex items-center gap-3 rounded-2xl px-1 py-2">
                 <button onClick={() => navigate(`/profile/${u.id}`)}>
-                  <Avatar name={u.name} size={48} />
+                  <Avatar name={u.name} avatarUrl={u.avatar_url} size={48} />
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{u.name}</p>
@@ -111,7 +111,7 @@ export function PeopleTab() {
             {othersList.map((u) => (
               <div key={u.id} className="flex items-center gap-3 rounded-2xl glass-card p-2.5">
                 <button onClick={() => navigate(`/profile/${u.id}`)}>
-                  <Avatar name={u.name} size={46} />
+                  <Avatar name={u.name} avatarUrl={u.avatar_url} size={46} />
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{u.name}</p>

@@ -51,7 +51,7 @@ export function Marketplace() {
                 <p className="truncate text-[13px] font-semibold text-ink">{l.title}</p>
                 <p className="mt-0.5 font-display text-sm font-bold text-cyan-300">${l.price.toFixed(2)}</p>
                 <div className="mt-2 flex items-center gap-1.5">
-                  <Avatar name={l.seller.name} size={18} />
+                  <Avatar name={l.seller.name} avatarUrl={l.seller.avatar_url} size={18} />
                   <span className="truncate text-[11px] text-mist">{l.seller.name}</span>
                 </div>
               </div>

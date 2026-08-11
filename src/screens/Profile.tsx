@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check, Gift,
+  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2,
 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { GiftPicker } from "../components/GiftPicker";
@@ -11,6 +11,7 @@ import {
   countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
   listPostsByAuthor, toggleFollow, updateProfile, type SimplePost,
 } from "../lib/api";
+import { uploadImage } from "../lib/storage";
 
 const tabs = [
   { id: "posts", icon: Grid3x3 },
@@ -92,7 +93,7 @@ export function Profile() {
         <div className="absolute inset-0 rounded-full border border-cyan-400/25 animate-spin-slow" style={{ animationDuration: "18s" }} />
         <div className="absolute inset-4 rounded-full border border-violet-400/25" />
         <span className="absolute inset-0 rounded-full grad-primary opacity-20 blur-2xl animate-glow-pulse" />
-        <Avatar name={displayProfile.name} size={140} className="relative" />
+        <Avatar name={displayProfile.name} avatarUrl={displayProfile.avatar_url} size={140} className="relative" />
         {isMe && (
           <button
             onClick={() => setEditing(true)}
@@ -175,11 +176,17 @@ export function Profile() {
           <p className="py-10 text-center text-[13px] text-mist">No posts yet.</p>
         ) : (
           <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
-            {posts.map((p) => (
-              <div key={p.id} className="relative aspect-square" style={{ background: gradientFor(p.id) }}>
-                <p className="absolute inset-0 line-clamp-4 p-2 text-[10px] font-medium text-white/90">{p.text}</p>
-              </div>
-            ))}
+            {posts.map((p) =>
+              p.image_url ? (
+                <div key={p.id} className="aspect-square overflow-hidden">
+                  <img src={p.image_url} alt="" className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <div key={p.id} className="relative aspect-square" style={{ background: gradientFor(p.id) }}>
+                  <p className="absolute inset-0 line-clamp-4 p-2 text-[10px] font-medium text-white/90">{p.text}</p>
+                </div>
+              )
+            )}
           </div>
         ))}
       {tab !== "posts" && <p className="py-10 text-center text-[13px] text-mist">Nothing here yet.</p>}
@@ -220,12 +227,34 @@ function EditProfileModal({
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio ?? "");
   const [location, setLocation] = useState(profile.location ?? "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
   const save = async () => {
     setSaving(true);
     try {
-      await updateProfile(profile.id, { name: name.trim() || profile.name, bio: bio.trim(), location: location.trim() });
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        setUploadingAvatar(true);
+        avatarUrl = await uploadImage(profile.id, avatarFile);
+        setUploadingAvatar(false);
+      }
+      await updateProfile(profile.id, {
+        name: name.trim() || profile.name,
+        bio: bio.trim(),
+        location: location.trim(),
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+      });
       onSaved();
     } finally {
       setSaving(false);
@@ -243,6 +272,18 @@ function EditProfileModal({
           <button onClick={onClose} className="rounded-full p-2 chip text-mist">
             <X className="h-4 w-4" />
           </button>
+        </div>
+        <div className="mb-4 flex justify-center">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="relative flex h-24 w-24 items-center justify-center"
+          >
+            <Avatar name={profile.name} avatarUrl={avatarPreview ?? profile.avatar_url} size={96} />
+            <span className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full grad-primary text-white ring-2 ring-void">
+              {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            </span>
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickAvatar} />
         </div>
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">

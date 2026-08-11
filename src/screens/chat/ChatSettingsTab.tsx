@@ -25,7 +25,7 @@ export function ChatSettingsTab() {
         onClick={() => navigate("/profile")}
         className="mb-5 flex w-full items-center gap-3 rounded-2xl glass-card p-3.5 text-left"
       >
-        <Avatar name={profile?.name ?? "You"} size={52} />
+        <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={52} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{profile?.name ?? "Loading…"}</p>
           <p className="text-[11px] text-mist">@{profile?.username ?? ""}</p>

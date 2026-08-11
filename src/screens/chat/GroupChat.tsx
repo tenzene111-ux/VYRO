@@ -120,7 +120,7 @@ export function GroupChat() {
               }
               return (
                 <div key={m.id} className="flex items-start gap-2.5">
-                  <Avatar name={author?.name ?? "?"} size={32} />
+                  <Avatar name={author?.name ?? "?"} avatarUrl={author?.avatar_url} size={32} />
                   <div className="max-w-[75%]">
                     <p className="mb-0.5 text-[11px] font-medium text-violet-300">{author?.name ?? "…"}</p>
                     <div className="rounded-2xl chip px-3.5 py-2.5 text-[13.5px] text-ink">{m.text}</div>

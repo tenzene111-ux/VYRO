@@ -56,7 +56,7 @@ export function ChatList() {
               onClick={() => navigate(`/chat/${c.id}`)}
               className="flex items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
             >
-              <Avatar name={c.other.name} size={50} />
+              <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={50} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-semibold text-ink">{c.other.name}</p>
                 <p className="truncate text-[12.5px] text-mist">{c.last_message ?? "Say hello 👋"}</p>

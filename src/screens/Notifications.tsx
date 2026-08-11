@@ -74,7 +74,7 @@ export function Notifications() {
                 }`}
               >
                 <div className="relative shrink-0">
-                  <Avatar name={n.actor?.name ?? "VYRO"} size={44} />
+                  <Avatar name={n.actor?.name ?? "VYRO"} avatarUrl={n.actor?.avatar_url} size={44} />
                   <span
                     className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface ${colorFor[n.type] ?? "text-mist"}`}
                   >
