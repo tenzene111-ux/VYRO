@@ -1,54 +1,80 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Phone, Mail, AtSign, Eye, EyeOff, Fingerprint } from "lucide-react";
+import { Mail, Eye, EyeOff, Fingerprint, Loader2 } from "lucide-react";
 import { Logo, LogoMark } from "../components/Logo";
-
-const methods = [
-  { id: "phone", label: "Phone", icon: Phone },
-  { id: "email", label: "Email", icon: Mail },
-  { id: "username", label: "Username", icon: AtSign },
-];
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 export function Login() {
   const navigate = useNavigate();
-  const [method, setMethod] = useState("phone");
+  const { signInWithPassword } = useAuth();
   const [showPw, setShowPw] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleLogin = async () => {
+    setError(null);
+    setNotice(null);
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await signInWithPassword(email.trim(), password);
+    setBusy(false);
+    if (error) {
+      setError(error);
+      return;
+    }
+    navigate("/home");
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError("Enter your email above first, then tap \"Forgot password?\"");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotice("Password reset email sent — check your inbox.");
+  };
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-y-auto bg-vyro-radial px-6 safe-top">
-      <div className="flex flex-col items-center pb-6 pt-10">
+      <div className="flex flex-col items-center pb-8 pt-10">
         <LogoMark size={52} />
         <Logo size={20} />
         <p className="mt-1.5 text-[12.5px] text-mist">Your World. Your People. Your Voice.</p>
       </div>
 
-      <div className="mb-5 flex gap-2 rounded-2xl chip p-1">
-        {methods.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setMethod(m.id)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors ${
-              method === m.id ? "grad-purple-blue text-white" : "text-mist"
-            }`}
-          >
-            <m.icon className="h-3.5 w-3.5" />
-            {m.label}
-          </button>
-        ))}
-      </div>
-
       <div className="flex flex-col gap-3">
         <label className="flex items-center gap-2.5 rounded-2xl chip px-4 py-3.5">
-          <ActiveMethodIcon method={method} />
+          <Mail className="h-4.5 w-4.5 shrink-0 text-mist" />
           <input
-            placeholder={method === "phone" ? "+975 17 123 456" : method === "email" ? "you@example.com" : "@username"}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
             className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
           />
         </label>
         <label className="flex items-center gap-2.5 rounded-2xl chip px-4 py-3.5">
-          <Fingerprint className="h-4.5 w-4.5 text-mist" />
+          <Fingerprint className="h-4.5 w-4.5 shrink-0 text-mist" />
           <input
             type={showPw ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
             placeholder="Password"
             className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
           />
@@ -58,29 +84,21 @@ export function Login() {
         </label>
       </div>
 
-      <button className="mt-2 self-end text-xs font-medium text-violet-300">Forgot password?</button>
+      {error && <p className="mt-3 text-[12.5px] text-rose-400">{error}</p>}
+      {notice && <p className="mt-3 text-[12.5px] text-cyan-300">{notice}</p>}
 
-      <button
-        onClick={() => navigate("/onboarding")}
-        className="mt-6 rounded-full grad-primary py-3.5 text-sm font-bold text-white glow-violet active:scale-[0.98] transition-transform"
-      >
-        Log In
+      <button onClick={handleForgotPassword} className="mt-2 self-end text-xs font-medium text-violet-300">
+        Forgot password?
       </button>
 
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-white/8" />
-        <span className="text-[11px] text-mist">or continue with</span>
-        <div className="h-px flex-1 bg-white/8" />
-      </div>
-
-      <div className="flex gap-3">
-        <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl chip py-3 text-sm font-semibold text-ink">
-          Google
-        </button>
-        <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl chip py-3 text-sm font-semibold text-ink">
-          Apple
-        </button>
-      </div>
+      <button
+        onClick={handleLogin}
+        disabled={busy}
+        className="mt-6 flex items-center justify-center gap-2 rounded-full grad-primary py-3.5 text-sm font-bold text-white glow-violet transition-transform active:scale-[0.98] disabled:opacity-60"
+      >
+        {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        Log In
+      </button>
 
       <p className="mt-8 pb-8 text-center text-[13px] text-mist">
         New to VYRO?{" "}
@@ -90,9 +108,4 @@ export function Login() {
       </p>
     </div>
   );
-}
-
-function ActiveMethodIcon({ method }: { method: string }) {
-  const Icon = methods.find((m) => m.id === method)?.icon ?? Phone;
-  return <Icon className="h-4.5 w-4.5 text-mist" />;
 }

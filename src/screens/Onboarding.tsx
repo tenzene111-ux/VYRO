@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Eye, EyeOff, Globe2, Lock } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { users } from "../data/mock";
+import { useAuth } from "../context/AuthContext";
+import { listProfiles, toggleFollow } from "../lib/api";
+import type { Profile } from "../context/AuthContext";
 
 const interests = [
   "Travel", "Music", "Gaming", "Photography", "Sports", "Art & Design",
@@ -13,13 +15,31 @@ const steps = ["interests", "creators", "privacy"] as const;
 
 export function Onboarding() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<string[]>([]);
+  const [people, setPeople] = useState<Profile[]>([]);
   const [followed, setFollowed] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
 
+  useEffect(() => {
+    if (!user) return;
+    listProfiles(user.id).then(setPeople).catch(() => setPeople([]));
+  }, [user]);
+
   const toggle = (list: string[], set: (v: string[]) => void, item: string) =>
     set(list.includes(item) ? list.filter((i) => i !== item) : [...list, item]);
+
+  const handleToggleFollow = async (targetId: string) => {
+    if (!user) return;
+    const active = followed.includes(targetId);
+    toggle(followed, setFollowed, targetId);
+    try {
+      await toggleFollow(user.id, targetId, active);
+    } catch {
+      toggle(followed, setFollowed, targetId);
+    }
+  };
 
   const finish = () => navigate("/home");
 
@@ -59,8 +79,13 @@ export function Onboarding() {
         <div>
           <h2 className="font-display text-xl font-bold text-ink">Follow creators & friends</h2>
           <p className="mt-1 text-[13px] text-mist">Build your circle from the start.</p>
+          {people.length === 0 && (
+            <p className="mt-8 text-center text-[13px] text-mist">
+              No one else has joined VYRO yet — invite friends and come back to follow them here.
+            </p>
+          )}
           <div className="mt-5 flex flex-col gap-2.5">
-            {users.slice(1, 7).map((u) => {
+            {people.map((u) => {
               const active = followed.includes(u.id);
               return (
                 <div key={u.id} className="flex items-center gap-3 rounded-2xl glass-card p-3">
@@ -70,7 +95,7 @@ export function Onboarding() {
                     <p className="text-[11px] text-mist">@{u.username}</p>
                   </div>
                   <button
-                    onClick={() => toggle(followed, setFollowed, u.id)}
+                    onClick={() => handleToggleFollow(u.id)}
                     className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                       active ? "chip text-ink" : "grad-purple-blue text-white"
                     }`}

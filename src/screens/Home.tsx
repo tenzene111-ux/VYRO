@@ -1,17 +1,21 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { Search, Bell, MessageCircle, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Search, Bell, MessageCircle, Plus, Loader2 } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
-import { currentUser, stories, byId } from "../data/mock";
 import { PostCard } from "../components/PostCard";
-import { posts as mockPosts } from "../data/mock";
-
-const feedTabs = ["For You", "Following", "Friends", "Groups"];
+import { useAuth } from "../context/AuthContext";
+import { listFeedPosts, type FeedPost } from "../lib/api";
 
 export function Home() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("For You");
+  const { user, profile } = useAuth();
+  const [posts, setPosts] = useState<FeedPost[] | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    listFeedPosts(user.id).then(setPosts).catch(() => setPosts([]));
+  }, [user]);
 
   return (
     <div className="px-4">
@@ -28,57 +32,38 @@ export function Home() {
             <Bell className="h-5 w-5" />
           </IconBtn>
           <button onClick={() => navigate("/profile")} className="ml-1">
-            <Avatar name={currentUser.name} size={32} />
+            <Avatar name={profile?.name ?? "You"} size={32} />
           </button>
         </div>
       </header>
 
-      {/* Stories */}
-      <div className="no-scrollbar -mx-4 flex gap-3.5 overflow-x-auto px-4 pb-4">
-        <button onClick={() => navigate("/create/story")} className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full grad-primary glow-violet">
-            <Plus className="h-6 w-6 text-white" />
-          </span>
-          <span className="text-[11px] text-mist">Your Story</span>
-        </button>
-        {stories.map((s) => {
-          const user = byId(s.userId);
-          return (
-            <button
-              key={s.id}
-              onClick={() => navigate(`/stories/${s.userId}`)}
-              className="flex w-16 shrink-0 flex-col items-center gap-1.5"
-            >
-              <Avatar name={user.name} size={54} ring={s.seen ? "story-seen" : "story"} />
-              <span className="w-16 truncate text-center text-[11px] text-mist">{user.name.split(" ")[0]}</span>
-            </button>
-          );
-        })}
-      </div>
+      <button
+        onClick={() => navigate("/create/post")}
+        className="mb-4 flex w-full items-center gap-3 rounded-2xl glass-card px-4 py-3.5 text-left"
+      >
+        <Avatar name={profile?.name ?? "You"} size={34} />
+        <span className="text-[13.5px] text-mist">What's on your mind?</span>
+        <span className="ml-auto flex h-8 w-8 items-center justify-center rounded-full grad-primary">
+          <Plus className="h-4 w-4 text-white" />
+        </span>
+      </button>
 
-      {/* Feed tabs */}
-      <div className="no-scrollbar -mx-4 mb-1 flex gap-6 overflow-x-auto border-b border-white/5 px-4">
-        {feedTabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`relative shrink-0 pb-3 text-sm font-medium transition-colors ${
-              tab === t ? "text-ink" : "text-mist"
-            }`}
-          >
-            {t}
-            {tab === t && (
-              <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full grad-primary" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-4 py-4">
-        {mockPosts.map((p) => (
-          <PostCard key={p.id} post={p} />
-        ))}
-      </div>
+      {posts === null ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-5 w-5 animate-spin text-mist" />
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-16 text-center">
+          <p className="font-display text-sm font-semibold text-ink">Your feed is empty</p>
+          <p className="max-w-[240px] text-[12.5px] text-mist">Be the first to share something with VYRO.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 pb-4">
+          {posts.map((p) => (
+            <PostCard key={p.id} post={p} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

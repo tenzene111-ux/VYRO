@@ -26,6 +26,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Supabase's anon/publishable key is designed to be public (it's
+          # gated by row-level security, not secrecy), so it's safe to bake
+          # into the deployed build here rather than needing a GitHub secret.
+          VITE_SUPABASE_URL: https://cdynswgpcvvsnggmffpc.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_XC9SbewzNX084LfE3_b3mQ__s1BlS9r
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

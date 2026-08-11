@@ -2,19 +2,23 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { LogoMark } from "../components/Logo";
+import { useAuth } from "../context/AuthContext";
 
 export function Splash() {
   const navigate = useNavigate();
+  const { session, loading } = useAuth();
   const [showTag, setShowTag] = useState(false);
 
   useEffect(() => {
     const t1 = setTimeout(() => setShowTag(true), 700);
-    const t2 = setTimeout(() => navigate("/login"), 2600);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [navigate]);
+    return () => clearTimeout(t1);
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const t2 = setTimeout(() => navigate(session ? "/home" : "/login"), 1600);
+    return () => clearTimeout(t2);
+  }, [loading, session, navigate]);
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center bg-vyro-radial">

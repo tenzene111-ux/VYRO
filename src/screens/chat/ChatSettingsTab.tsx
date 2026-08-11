@@ -5,13 +5,19 @@ import {
   LogOut, EyeOff, Fingerprint,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
-import { currentUser } from "../../data/mock";
+import { useAuth } from "../../context/AuthContext";
 
 export function ChatSettingsTab() {
   const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
   const [darkMode, setDarkMode] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
   const [biometric, setBiometric] = useState(true);
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="px-4">
@@ -19,10 +25,10 @@ export function ChatSettingsTab() {
         onClick={() => navigate("/profile")}
         className="mb-5 flex w-full items-center gap-3 rounded-2xl glass-card p-3.5 text-left"
       >
-        <Avatar name={currentUser.name} size={52} />
+        <Avatar name={profile?.name ?? "You"} size={52} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{currentUser.name}</p>
-          <p className="text-[11px] text-mist">@{currentUser.username}</p>
+          <p className="truncate text-sm font-semibold text-ink">{profile?.name ?? "Loading…"}</p>
+          <p className="text-[11px] text-mist">@{profile?.username ?? ""}</p>
         </div>
         <ChevronRight className="h-4 w-4 text-mist" />
       </button>
@@ -51,7 +57,7 @@ export function ChatSettingsTab() {
       </SettingsGroup>
 
       <button
-        onClick={() => navigate("/login")}
+        onClick={handleLogout}
         className="mb-8 mt-2 flex w-full items-center justify-center gap-2 rounded-2xl chip py-3 text-sm font-semibold text-rose-400"
       >
         <LogOut className="h-4.5 w-4.5" /> Log Out

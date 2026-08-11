@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Mic, QrCode, MessageCircle, Flame, Music, Plane, Gamepad2, Trophy, Palette, ChevronRight } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { gradientFor } from "../lib/gradients";
-import { trendingTopics, users } from "../data/mock";
+import { trendingTopics } from "../data/mock";
+import { useAuth, type Profile } from "../context/AuthContext";
+import { listFollowing, listProfiles, toggleFollow } from "../lib/api";
 
 const categories = [
   { id: "trending", label: "Trending", icon: Flame, grad: "from-orange-500 to-pink-500" },
@@ -13,10 +16,27 @@ const categories = [
   { id: "art", label: "Art & Design", icon: Palette, grad: "from-fuchsia-500 to-purple-600" },
 ];
 
-const suggested = users.filter((u) => u.id !== "u0").slice(0, 2);
-
 export function Explore() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [suggested, setSuggested] = useState<Profile[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([listProfiles(user.id), listFollowing(user.id)]).then(([profiles, following]) => {
+      setSuggested(profiles.filter((p) => !following.has(p.id)).slice(0, 4));
+    });
+  }, [user]);
+
+  const handleFollow = async (targetId: string) => {
+    if (!user) return;
+    setSuggested((prev) => prev.filter((p) => p.id !== targetId));
+    try {
+      await toggleFollow(user.id, targetId, false);
+    } catch {
+      // leave it removed from the list; user can re-follow from People tab if this failed
+    }
+  };
 
   return (
     <div className="px-4 safe-top">
@@ -69,21 +89,36 @@ export function Explore() {
         ))}
       </div>
 
-      <SectionHeader title="People You May Know" />
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        {suggested.map((u) => (
-          <div key={u.id} className="flex flex-col items-center gap-2 rounded-2xl glass-card p-4 text-center">
-            <Avatar name={u.name} size={64} />
-            <div>
-              <p className="text-sm font-semibold text-ink">{u.name}</p>
-              <p className="text-[11px] text-mist">{Math.floor(Math.random() * 20) + 2} mutual friends</p>
-            </div>
-            <button className="mt-1 w-full rounded-full grad-purple-blue py-1.5 text-xs font-semibold text-white">
-              Add
-            </button>
+      {suggested.length > 0 && (
+        <>
+          <SectionHeader title="People You May Know" />
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            {suggested.map((u) => (
+              <button
+                key={u.id}
+                onClick={() => navigate(`/profile/${u.id}`)}
+                className="flex flex-col items-center gap-2 rounded-2xl glass-card p-4 text-center"
+              >
+                <Avatar name={u.name} size={64} />
+                <div>
+                  <p className="text-sm font-semibold text-ink">{u.name}</p>
+                  <p className="text-[11px] text-mist">@{u.username}</p>
+                </div>
+                <span
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleFollow(u.id);
+                  }}
+                  className="mt-1 w-full rounded-full grad-purple-blue py-1.5 text-xs font-semibold text-white"
+                >
+                  Follow
+                </span>
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }

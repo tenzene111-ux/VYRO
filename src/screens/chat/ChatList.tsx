@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Camera, SquarePen, Pin, BellOff, Mic } from "lucide-react";
+import { Search, SquarePen, Loader2 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
-import { conversations, byId } from "../../data/mock";
-
-const filters = ["All", "Unread", "Groups", "Channels"];
+import { useAuth } from "../../context/AuthContext";
+import { listConversations, type ChatConversation } from "../../lib/api";
 
 export function ChatList() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState("All");
+  const { user } = useAuth();
+  const [conversations, setConversations] = useState<ChatConversation[] | null>(null);
+  const [query, setQuery] = useState("");
 
-  const list = conversations.filter((c) => (filter === "Unread" ? c.unread > 0 : true));
+  useEffect(() => {
+    if (!user) return;
+    listConversations(user.id).then(setConversations).catch(() => setConversations([]));
+  }, [user]);
+
+  const filtered = (conversations ?? []).filter((c) =>
+    c.other.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   return (
     <div className="px-4">
@@ -18,65 +26,59 @@ export function ChatList() {
         <div className="flex flex-1 items-center gap-2 rounded-2xl chip px-3.5 py-2.5">
           <Search className="h-4 w-4 text-mist" />
           <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search messages"
             className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
           />
         </div>
-        <button className="rounded-full p-2.5 chip text-mist">
-          <Camera className="h-4.5 w-4.5" />
-        </button>
-        <button className="rounded-full p-2.5 chip text-mist">
+        <button onClick={() => navigate("/chat/people")} className="rounded-full p-2.5 chip text-mist">
           <SquarePen className="h-4.5 w-4.5" />
         </button>
       </div>
 
-      <div className="no-scrollbar mb-2 flex gap-2 overflow-x-auto">
-        {filters.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-              filter === f ? "grad-purple-blue text-white" : "chip text-mist"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-col">
-        {list.map((c) => {
-          const user = byId(c.userId);
-          return (
+      {conversations === null ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-5 w-5 animate-spin text-mist" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-16 text-center">
+          <p className="font-display text-sm font-semibold text-ink">No conversations yet</p>
+          <p className="max-w-[240px] text-[12.5px] text-mist">
+            Go to <span className="text-cyan-300">People</span> and message someone to start chatting.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col">
+          {filtered.map((c) => (
             <button
               key={c.id}
               onClick={() => navigate(`/chat/${c.id}`)}
               className="flex items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
             >
-              <Avatar name={user.name} size={50} online={user.online} />
+              <Avatar name={c.other.name} size={50} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate text-[14px] font-semibold text-ink">{user.name}</p>
-                  {c.pinned && <Pin className="h-3 w-3 shrink-0 text-mist" />}
-                  {c.muted && <BellOff className="h-3 w-3 shrink-0 text-mist" />}
-                </div>
-                <p className="flex items-center gap-1 truncate text-[12.5px] text-mist">
-                  {c.kind === "voice" && <Mic className="h-3 w-3 shrink-0 text-violet-400" />}
-                  <span className="truncate">{c.lastMessage}</span>
-                </p>
+                <p className="truncate text-[14px] font-semibold text-ink">{c.other.name}</p>
+                <p className="truncate text-[12.5px] text-mist">{c.last_message ?? "Say hello 👋"}</p>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
-                <span className="text-[11px] text-mist">{c.time}</span>
-                {c.unread > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full grad-primary px-1.5 text-[10px] font-bold text-white">
-                    {c.unread}
-                  </span>
-                )}
-              </div>
+              {c.last_message_at && (
+                <span className="shrink-0 text-[11px] text-mist">{timeAgo(c.last_message_at)}</span>
+              )}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function timeAgo(iso: string) {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
 }

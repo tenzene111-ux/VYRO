@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, User as UserIcon, BadgeCheck, MessageCircle } from "lucide-react";
+import {
+  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check,
+} from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { currentUser, users } from "../data/mock";
+import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
+import {
+  countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
+  listPostsByAuthor, toggleFollow, updateProfile, type SimplePost,
+} from "../lib/api";
 
 const tabs = [
   { id: "posts", icon: Grid3x3 },
@@ -15,9 +21,58 @@ const tabs = [
 export function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const user = id ? users.find((u) => u.id === id) ?? currentUser : currentUser;
-  const isMe = user.id === currentUser.id;
+  const { user, profile: myProfile, refreshProfile } = useAuth();
+  const isMe = !id || id === user?.id;
+
+  const [viewedProfile, setViewedProfile] = useState<ProfileRow | null>(isMe ? myProfile : null);
+  const [posts, setPosts] = useState<SimplePost[]>([]);
+  const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
+  const [following, setFollowing] = useState(false);
   const [tab, setTab] = useState("posts");
+  const [editing, setEditing] = useState(false);
+
+  const targetId = isMe ? user?.id : id;
+  const displayProfile = isMe ? myProfile : viewedProfile;
+
+  useEffect(() => {
+    if (isMe) setViewedProfile(myProfile);
+  }, [isMe, myProfile]);
+
+  useEffect(() => {
+    if (!targetId) return;
+    if (!isMe) getProfile(targetId).then(setViewedProfile);
+    listPostsByAuthor(targetId).then(setPosts).catch(() => setPosts([]));
+    Promise.all([countPosts(targetId), countFollowers(targetId), countFollowing(targetId)]).then(
+      ([p, followers, followingCount]) => setStats({ posts: p, followers, following: followingCount })
+    );
+    if (!isMe && user) isFollowing(user.id, targetId).then(setFollowing);
+  }, [targetId, isMe, user]);
+
+  const handleToggleFollow = async () => {
+    if (!user || !targetId) return;
+    setFollowing((f) => !f);
+    setStats((s) => ({ ...s, followers: s.followers + (following ? -1 : 1) }));
+    try {
+      await toggleFollow(user.id, targetId, following);
+    } catch {
+      setFollowing((f) => !f);
+      setStats((s) => ({ ...s, followers: s.followers + (following ? 1 : -1) }));
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!user || !targetId) return;
+    const conversationId = await getOrCreateConversationWith(user.id, targetId);
+    navigate(`/chat/${conversationId}`);
+  };
+
+  if (!displayProfile) {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-vyro-radial">
+        <p className="text-sm text-mist">Loading profile…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="safe-top">
@@ -27,11 +82,6 @@ export function Profile() {
           <button onClick={() => navigate("/chat")} className="rounded-full p-2 chip text-mist">
             <MessageCircle className="h-4.5 w-4.5" />
           </button>
-          {isMe && (
-            <button className="rounded-full p-2 chip text-mist">
-              <UserIcon className="h-4.5 w-4.5" />
-            </button>
-          )}
         </div>
       </header>
 
@@ -40,9 +90,12 @@ export function Profile() {
         <div className="absolute inset-0 rounded-full border border-cyan-400/25 animate-spin-slow" style={{ animationDuration: "18s" }} />
         <div className="absolute inset-4 rounded-full border border-violet-400/25" />
         <span className="absolute inset-0 rounded-full grad-primary opacity-20 blur-2xl animate-glow-pulse" />
-        <Avatar name={user.name} size={140} className="relative" />
+        <Avatar name={displayProfile.name} size={140} className="relative" />
         {isMe && (
-          <button className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-full glass-strong px-3 py-1.5 text-xs font-medium text-ink">
+          <button
+            onClick={() => setEditing(true)}
+            className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-full glass-strong px-3 py-1.5 text-xs font-medium text-ink"
+          >
             <Pencil className="h-3.5 w-3.5" /> Edit
           </button>
         )}
@@ -50,42 +103,48 @@ export function Profile() {
 
       <div className="px-5 pt-2 text-center">
         <div className="flex items-center justify-center gap-1.5">
-          <h2 className="font-display text-lg font-bold text-ink">{user.name}</h2>
-          {user.verified && <BadgeCheck className="h-4.5 w-4.5 text-cyan-400" />}
+          <h2 className="font-display text-lg font-bold text-ink">{displayProfile.name}</h2>
+          {displayProfile.verified && <BadgeCheck className="h-4.5 w-4.5 text-cyan-400" />}
         </div>
         <p className="text-sm text-mist">
-          @{user.username} {user.location && `· ${user.location}`}
+          @{displayProfile.username} {displayProfile.location && `· ${displayProfile.location}`}
         </p>
-        {isMe && (
+        {displayProfile.bio && (
           <p className="mx-auto mt-2 max-w-[280px] whitespace-pre-line text-[13px] leading-relaxed text-ink/85">
-            {user.bio}
+            {displayProfile.bio}
           </p>
         )}
       </div>
 
       <div className="mt-5 flex items-center justify-center gap-6">
-        <Stat label="Posts" value={user.posts ?? 128} />
-        <Stat label="Friends" value={user.friends ?? 340} />
-        <Stat label="Followers" value={user.followers ?? 4200} />
-        <Stat label="Following" value={user.following ?? 512} />
+        <Stat label="Posts" value={stats.posts} />
+        <Stat label="Followers" value={stats.followers} />
+        <Stat label="Following" value={stats.following} />
       </div>
 
       <div className="flex gap-2 px-5 pt-5">
         {isMe ? (
-          <button className="flex-1 rounded-full grad-purple-blue py-2.5 text-sm font-semibold text-white glow-violet">
+          <button
+            onClick={() => setEditing(true)}
+            className="flex-1 rounded-full grad-purple-blue py-2.5 text-sm font-semibold text-white glow-violet"
+          >
             Edit Profile
           </button>
         ) : (
           <>
-            <button className="flex-1 rounded-full grad-purple-blue py-2.5 text-sm font-semibold text-white glow-violet">
-              Follow
+            <button
+              onClick={handleToggleFollow}
+              className={`flex-1 rounded-full py-2.5 text-sm font-semibold ${
+                following ? "chip text-ink" : "grad-purple-blue text-white glow-violet"
+              }`}
+            >
+              {following ? "Following" : "Follow"}
             </button>
-            <button className="flex-1 rounded-full chip py-2.5 text-sm font-semibold text-ink">Message</button>
+            <button onClick={handleMessage} className="flex-1 rounded-full chip py-2.5 text-sm font-semibold text-ink">
+              Message
+            </button>
           </>
         )}
-        <button className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full chip text-mist">
-          <UserIcon className="h-4.5 w-4.5" />
-        </button>
       </div>
 
       <div className="mt-6 flex justify-center gap-2 border-b border-white/5 px-5">
@@ -103,10 +162,104 @@ export function Profile() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <div key={i} className="aspect-square" style={{ background: gradientFor(user.id + i) }} />
+      {tab === "posts" &&
+        (posts.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-mist">No posts yet.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
+            {posts.map((p) => (
+              <div key={p.id} className="relative aspect-square" style={{ background: gradientFor(p.id) }}>
+                <p className="absolute inset-0 line-clamp-4 p-2 text-[10px] font-medium text-white/90">{p.text}</p>
+              </div>
+            ))}
+          </div>
         ))}
+      {tab !== "posts" && <p className="py-10 text-center text-[13px] text-mist">Nothing here yet.</p>}
+
+      {editing && isMe && myProfile && (
+        <EditProfileModal
+          profile={myProfile}
+          onClose={() => setEditing(false)}
+          onSaved={async () => {
+            await refreshProfile();
+            setEditing(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditProfileModal({
+  profile,
+  onClose,
+  onSaved,
+}: {
+  profile: ProfileRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(profile.name);
+  const [bio, setBio] = useState(profile.bio ?? "");
+  const [location, setLocation] = useState(profile.location ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateProfile(profile.id, { name: name.trim() || profile.name, bio: bio.trim(), location: location.trim() });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-w-[480px] rounded-t-3xl glass-strong p-5 pb-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <p className="font-display text-base font-semibold text-ink">Edit Profile</p>
+          <button onClick={onClose} className="rounded-full p-2 chip text-mist">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-mist">Name</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-2xl chip px-4 py-3 text-sm text-ink focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-mist">Bio</span>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              className="resize-none rounded-2xl chip px-4 py-3 text-sm text-ink focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-mist">Location</span>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="rounded-2xl chip px-4 py-3 text-sm text-ink focus:outline-none"
+            />
+          </label>
+        </div>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-full grad-primary py-3 text-sm font-bold text-white glow-violet disabled:opacity-60"
+        >
+          <Check className="h-4 w-4" /> Save
+        </button>
       </div>
     </div>
   );

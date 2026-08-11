@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Mic, MicOff, Volume2, Bluetooth, UserPlus, PhoneOff } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { byId } from "../data/mock";
+import { users } from "../data/mock";
 
 export function VoiceCall() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const user = byId(id ?? "u1");
+  const location = useLocation();
+  const stateName = (location.state as { name?: string } | null)?.name;
+  const name = stateName ?? users.find((u) => u.id === id)?.name ?? "VYRO User";
   const [muted, setMuted] = useState(false);
   const [speaker, setSpeaker] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -25,10 +27,10 @@ export function VoiceCall() {
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <div className="relative">
           <span className="absolute inset-0 -m-3 rounded-full grad-primary opacity-25 blur-2xl animate-glow-pulse" />
-          <Avatar name={user.name} size={140} className="relative" />
+          <Avatar name={name} size={140} className="relative" />
         </div>
         <div className="text-center">
-          <p className="font-display text-2xl font-bold text-ink">{user.name}</p>
+          <p className="font-display text-2xl font-bold text-ink">{name}</p>
           <p className="mt-1 text-sm text-mist">
             {mm}:{ss}
           </p>

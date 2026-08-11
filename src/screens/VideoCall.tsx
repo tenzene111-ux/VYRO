@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Video, VideoOff, Mic, MicOff, Volume2, Sparkles, PhoneOff, RefreshCw } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { byId, currentUser } from "../data/mock";
+import { users } from "../data/mock";
 import { gradientFor } from "../lib/gradients";
+import { useAuth } from "../context/AuthContext";
 
 export function VideoCall() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const user = byId(id ?? "u2");
+  const location = useLocation();
+  const { profile } = useAuth();
+  const stateName = (location.state as { name?: string } | null)?.name;
+  const name = stateName ?? users.find((u) => u.id === id)?.name ?? "VYRO User";
+  const myName = profile?.name ?? "You";
   const [camOff, setCamOff] = useState(false);
   const [muted, setMuted] = useState(false);
   const [speaker, setSpeaker] = useState(true);
@@ -24,7 +29,7 @@ export function VideoCall() {
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-hidden bg-black">
-      <div className="absolute inset-0" style={{ background: gradientFor(user.id + "call") }} />
+      <div className="absolute inset-0" style={{ background: gradientFor((id ?? "call") + "call") }} />
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/70" />
 
       <div className="relative z-10 flex items-center gap-3 px-3 pt-4 safe-top">
@@ -32,7 +37,7 @@ export function VideoCall() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <p className="text-[13px] font-semibold text-white">{user.name}</p>
+          <p className="text-[13px] font-semibold text-white">{name}</p>
           <p className="text-[11px] text-white/70">
             {mm}:{ss}
           </p>
@@ -42,10 +47,10 @@ export function VideoCall() {
       <div className="absolute right-3 top-20 z-10 h-32 w-24 overflow-hidden rounded-2xl border border-white/20 shadow-xl">
         {camOff ? (
           <div className="flex h-full w-full items-center justify-center bg-surface">
-            <Avatar name={currentUser.name} size={40} />
+            <Avatar name={myName} size={40} />
           </div>
         ) : (
-          <div className="h-full w-full" style={{ background: gradientFor(currentUser.id) }} />
+          <div className="h-full w-full" style={{ background: gradientFor(myName) }} />
         )}
       </div>
 
