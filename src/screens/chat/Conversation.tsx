@@ -3,12 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Phone, Video, Send, Loader2 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth, type Profile } from "../../context/AuthContext";
+import { useCall } from "../../context/CallContext";
 import { getConversationOther, listMessages, sendMessage, subscribeToMessages, type ChatMessage } from "../../lib/api";
 
 export function Conversation() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { startCall } = useCall();
   const [other, setOther] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [input, setInput] = useState("");
@@ -35,6 +37,12 @@ export function Conversation() {
     await sendMessage(id, user.id, text);
   };
 
+  const handleCall = async (kind: "voice" | "video") => {
+    if (!other) return;
+    await startCall(other.id, other.name, kind);
+    navigate(`/call/${kind}/${other.id}`, { state: { name: other.name } });
+  };
+
   return (
     <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">
       <header className="flex items-center gap-3 border-b border-white/5 px-3 py-3 safe-top">
@@ -48,16 +56,10 @@ export function Conversation() {
         </div>
         {other && (
           <>
-            <button
-              onClick={() => navigate(`/call/voice/${other.id}`, { state: { name: other.name } })}
-              className="rounded-full p-2 text-violet-300 hover:bg-white/5"
-            >
+            <button onClick={() => handleCall("voice")} className="rounded-full p-2 text-violet-300 hover:bg-white/5">
               <Phone className="h-4.5 w-4.5" />
             </button>
-            <button
-              onClick={() => navigate(`/call/video/${other.id}`, { state: { name: other.name } })}
-              className="rounded-full p-2 text-cyan-300 hover:bg-white/5"
-            >
+            <button onClick={() => handleCall("video")} className="rounded-full p-2 text-cyan-300 hover:bg-white/5">
               <Video className="h-4.5 w-4.5" />
             </button>
           </>

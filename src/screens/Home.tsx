@@ -4,17 +4,28 @@ import { Search, Bell, MessageCircle, Plus, Loader2 } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
-import { useAuth } from "../context/AuthContext";
-import { listFeedPosts, type FeedPost } from "../lib/api";
+import { useAuth, type Profile } from "../context/AuthContext";
+import { listFeedPosts, listActiveStories, listSeenStoryIds, type FeedPost, type StoryWithAuthor } from "../lib/api";
 
 export function Home() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<FeedPost[] | null>(null);
+  const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
 
   useEffect(() => {
     if (!user) return;
     listFeedPosts(user.id).then(setPosts).catch(() => setPosts([]));
+    Promise.all([listActiveStories(), listSeenStoryIds(user.id)]).then(([stories, seenIds]) => {
+      const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean }>();
+      for (const s of stories) {
+        const existing = byAuthor.get(s.author.id);
+        const seen = seenIds.has(s.id);
+        if (!existing) byAuthor.set(s.author.id, { author: s.author, seen });
+        else byAuthor.set(s.author.id, { author: s.author, seen: existing.seen && seen });
+      }
+      setStoryAuthors([...byAuthor.values()]);
+    });
   }, [user]);
 
   return (
@@ -36,6 +47,25 @@ export function Home() {
           </button>
         </div>
       </header>
+
+      <div className="no-scrollbar -mx-4 mb-4 flex gap-3.5 overflow-x-auto px-4">
+        <button onClick={() => navigate("/create/story")} className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full grad-primary glow-violet">
+            <Plus className="h-6 w-6 text-white" />
+          </span>
+          <span className="text-[11px] text-mist">Your Story</span>
+        </button>
+        {storyAuthors.map(({ author, seen }) => (
+          <button
+            key={author.id}
+            onClick={() => navigate(`/stories/${author.id}`)}
+            className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+          >
+            <Avatar name={author.name} size={54} ring={seen ? "story-seen" : "story"} />
+            <span className="w-16 truncate text-center text-[11px] text-mist">{author.name.split(" ")[0]}</span>
+          </button>
+        ))}
+      </div>
 
       <button
         onClick={() => navigate("/create/post")}

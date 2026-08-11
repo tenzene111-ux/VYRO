@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check,
+  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check, Gift,
 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
+import { GiftPicker } from "../components/GiftPicker";
 import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
 import {
@@ -30,6 +31,7 @@ export function Profile() {
   const [following, setFollowing] = useState(false);
   const [tab, setTab] = useState("posts");
   const [editing, setEditing] = useState(false);
+  const [gifting, setGifting] = useState(false);
 
   const targetId = isMe ? user?.id : id;
   const displayProfile = isMe ? myProfile : viewedProfile;
@@ -143,6 +145,12 @@ export function Profile() {
             <button onClick={handleMessage} className="flex-1 rounded-full chip py-2.5 text-sm font-semibold text-ink">
               Message
             </button>
+            <button
+              onClick={() => setGifting(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full chip text-amber-300"
+            >
+              <Gift className="h-4.5 w-4.5" />
+            </button>
           </>
         )}
       </div>
@@ -184,6 +192,16 @@ export function Profile() {
             await refreshProfile();
             setEditing(false);
           }}
+        />
+      )}
+
+      {gifting && !isMe && targetId && myProfile && (
+        <GiftPicker
+          receiverId={targetId}
+          receiverName={displayProfile.name}
+          myCoins={myProfile.coins}
+          onClose={() => setGifting(false)}
+          onSent={refreshProfile}
         />
       )}
     </div>

@@ -1,83 +1,99 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Video, VideoOff, Mic, MicOff, Volume2, Sparkles, PhoneOff, RefreshCw } from "lucide-react";
+import { ArrowLeft, Video, VideoOff, Mic, MicOff, Volume2, VolumeOff, PhoneOff } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { users } from "../data/mock";
-import { gradientFor } from "../lib/gradients";
-import { useAuth } from "../context/AuthContext";
+import { useCall } from "../context/CallContext";
 
 export function VideoCall() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile } = useAuth();
+  const { callState, localStream, remoteStream, isMuted, isCameraOff, toggleMute, toggleCamera, hangUp } = useCall();
   const stateName = (location.state as { name?: string } | null)?.name;
-  const name = stateName ?? users.find((u) => u.id === id)?.name ?? "VYRO User";
-  const myName = profile?.name ?? "You";
-  const [camOff, setCamOff] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [speaker, setSpeaker] = useState(true);
+  const [speakerOff, setSpeakerOff] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  const inThisCall = callState.status !== "idle" && callState.peerId === id;
+  const name = inThisCall ? callState.peerName : stateName ?? "VYRO User";
+  const connecting = callState.status === "outgoing";
 
   useEffect(() => {
+    if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+  }, [remoteStream]);
+
+  useEffect(() => {
+    if (callState.status !== "active") return;
+    setSeconds(Math.floor((Date.now() - callState.startedAt) / 1000));
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [callState]);
+
+  useEffect(() => {
+    if (callState.status === "idle") navigate(-1);
+  }, [callState.status, navigate]);
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
 
+  const handleEnd = () => {
+    hangUp();
+    navigate(-1);
+  };
+
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-hidden bg-black">
-      <div className="absolute inset-0" style={{ background: gradientFor((id ?? "call") + "call") }} />
+      {remoteStream ? (
+        <video ref={remoteVideoRef} autoPlay playsInline muted={speakerOff} className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface">
+          <Avatar name={name} size={120} />
+        </div>
+      )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/70" />
 
       <div className="relative z-10 flex items-center gap-3 px-3 pt-4 safe-top">
-        <button onClick={() => navigate(-1)} className="rounded-full bg-black/35 p-2 text-white backdrop-blur">
+        <button onClick={handleEnd} className="rounded-full bg-black/35 p-2 text-white backdrop-blur">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
           <p className="text-[13px] font-semibold text-white">{name}</p>
-          <p className="text-[11px] text-white/70">
-            {mm}:{ss}
-          </p>
+          <p className="text-[11px] text-white/70">{connecting ? "Calling…" : `${mm}:${ss}`}</p>
         </div>
       </div>
 
       <div className="absolute right-3 top-20 z-10 h-32 w-24 overflow-hidden rounded-2xl border border-white/20 shadow-xl">
-        {camOff ? (
+        {isCameraOff || !localStream ? (
           <div className="flex h-full w-full items-center justify-center bg-surface">
-            <Avatar name={myName} size={40} />
+            <Avatar name="You" size={40} />
           </div>
         ) : (
-          <div className="h-full w-full" style={{ background: gradientFor(myName) }} />
+          <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
         )}
       </div>
 
       <div className="relative z-10 mt-auto flex items-center justify-between gap-2 px-5 pb-8 safe-bottom">
-        <CallBtn onClick={() => setCamOff((c) => !c)} active={camOff}>
-          {camOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+        <CallBtn onClick={toggleCamera} active={isCameraOff}>
+          {isCameraOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
         </CallBtn>
-        <CallBtn onClick={() => setMuted((m) => !m)} active={muted}>
-          {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+        <CallBtn onClick={toggleMute} active={isMuted}>
+          {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
         </CallBtn>
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleEnd}
           className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-500 text-white shadow-[0_10px_30px_-6px_rgba(244,63,94,0.7)] active:scale-95 transition-transform"
         >
           <PhoneOff className="h-6 w-6" />
         </button>
-        <CallBtn onClick={() => setSpeaker((s) => !s)} active={speaker}>
-          <Volume2 className="h-5 w-5" />
-        </CallBtn>
-        <CallBtn onClick={() => {}}>
-          <Sparkles className="h-5 w-5" />
+        <CallBtn onClick={() => setSpeakerOff((s) => !s)} active={speakerOff}>
+          {speakerOff ? <VolumeOff className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
         </CallBtn>
       </div>
-
-      <button className="absolute bottom-32 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
-        <RefreshCw className="h-4 w-4" />
-      </button>
     </div>
   );
 }

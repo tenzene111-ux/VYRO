@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MessageCircle, UserPlus, Loader2 } from "lucide-react";
+import { MessageCircle, Phone, UserPlus, Loader2 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth, type Profile } from "../../context/AuthContext";
+import { useCall } from "../../context/CallContext";
 import { getOrCreateConversationWith, listFollowing, listProfiles, toggleFollow } from "../../lib/api";
 
 export function PeopleTab() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { startCall } = useCall();
   const [people, setPeople] = useState<Profile[] | null>(null);
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [messaging, setMessaging] = useState<string | null>(null);
@@ -50,6 +52,11 @@ export function PeopleTab() {
     }
   };
 
+  const handleCall = async (target: Profile) => {
+    await startCall(target.id, target.name, "voice");
+    navigate(`/call/voice/${target.id}`, { state: { name: target.name } });
+  };
+
   if (people === null) {
     return (
       <div className="flex justify-center py-16">
@@ -79,6 +86,12 @@ export function PeopleTab() {
                   <p className="truncate text-sm font-semibold text-ink">{u.name}</p>
                   <p className="text-[11px] text-mist">@{u.username}</p>
                 </div>
+                <button
+                  onClick={() => handleCall(u)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full chip text-cyan-300"
+                >
+                  <Phone className="h-4 w-4" />
+                </button>
                 <button
                   onClick={() => handleMessage(u.id)}
                   disabled={messaging === u.id}

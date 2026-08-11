@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { Profile } from "../context/AuthContext";
+import type { Database } from "./database.types";
 
 export type FeedPost = {
   id: string;
@@ -331,4 +332,428 @@ export function subscribeToMessages(conversationId: string, onInsert: (message: 
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// ---------- notifications ----------
+
+export type NotificationRow = {
+  id: string;
+  type: string;
+  read: boolean;
+  created_at: string;
+  actor: Profile | null;
+  post_id: string | null;
+};
+
+export async function listNotifications(userId: string): Promise<NotificationRow[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("id, type, read, created_at, actor_id, post_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const actorIds = [...new Set(data.map((n) => n.actor_id).filter((id): id is string => !!id))];
+  const { data: actors } = actorIds.length
+    ? await supabase.from("profiles").select("*").in("id", actorIds)
+    : { data: [] as Profile[] };
+  const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
+
+  return data.map((n) => ({
+    id: n.id,
+    type: n.type,
+    read: n.read,
+    created_at: n.created_at,
+    post_id: n.post_id,
+    actor: n.actor_id ? actorById.get(n.actor_id) ?? null : null,
+  }));
+}
+
+export async function markAllNotificationsRead(userId: string) {
+  const { error } = await supabase.from("notifications").update({ read: true }).eq("user_id", userId).eq("read", false);
+  if (error) throw error;
+}
+
+export function subscribeToNotifications(userId: string, onInsert: () => void) {
+  const channel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+      onInsert
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ---------- groups ----------
+
+export type Group = {
+  id: string;
+  name: string;
+  description: string | null;
+  privacy: string;
+  creator_id: string;
+  conversation_id: string | null;
+  created_at: string;
+  member_count: number;
+};
+
+async function attachMemberCounts(groups: Database["public"]["Tables"]["groups"]["Row"][]): Promise<Group[]> {
+  if (groups.length === 0) return [];
+  const { data: members } = await supabase
+    .from("group_members")
+    .select("group_id")
+    .in(
+      "group_id",
+      groups.map((g) => g.id)
+    );
+  const counts = new Map<string, number>();
+  for (const m of members ?? []) counts.set(m.group_id, (counts.get(m.group_id) ?? 0) + 1);
+  return groups.map((g) => ({ ...g, member_count: counts.get(g.id) ?? 0 }));
+}
+
+export async function listMyGroups(userId: string): Promise<Group[]> {
+  const { data: memberships } = await supabase.from("group_members").select("group_id").eq("user_id", userId);
+  const groupIds = (memberships ?? []).map((m) => m.group_id);
+  if (groupIds.length === 0) return [];
+  const { data, error } = await supabase.from("groups").select("*").in("id", groupIds);
+  if (error) throw error;
+  return attachMemberCounts(data ?? []);
+}
+
+export async function listDiscoverGroups(userId: string): Promise<Group[]> {
+  const { data: memberships } = await supabase.from("group_members").select("group_id").eq("user_id", userId);
+  const myGroupIds = (memberships ?? []).map((m) => m.group_id);
+  let query = supabase.from("groups").select("*").eq("privacy", "public");
+  if (myGroupIds.length > 0) query = query.not("id", "in", `(${myGroupIds.join(",")})`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return attachMemberCounts(data ?? []);
+}
+
+export async function createGroup(name: string, description: string, privacy: "public" | "private"): Promise<string> {
+  const { data, error } = await supabase.rpc("create_group", {
+    p_name: name,
+    p_description: description || null,
+    p_privacy: privacy,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function joinGroup(groupId: string) {
+  const { error } = await supabase.rpc("join_group", { p_group_id: groupId });
+  if (error) throw error;
+}
+
+export async function leaveGroup(groupId: string) {
+  const { error } = await supabase.rpc("leave_group", { p_group_id: groupId });
+  if (error) throw error;
+}
+
+export async function getGroup(groupId: string): Promise<Group | null> {
+  const { data } = await supabase.from("groups").select("*").eq("id", groupId).single();
+  if (!data) return null;
+  const withCounts = await attachMemberCounts([data]);
+  return withCounts[0] ?? null;
+}
+
+// ---------- marketplace ----------
+
+export type Listing = {
+  id: string;
+  title: string;
+  description: string | null;
+  price: number;
+  category: string | null;
+  created_at: string;
+  seller: Profile;
+};
+
+export async function listMarketplaceListings(): Promise<Listing[]> {
+  const { data: listings, error } = await supabase
+    .from("marketplace_listings")
+    .select("id, title, description, price, category, created_at, seller_id")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!listings || listings.length === 0) return [];
+
+  const sellerIds = [...new Set(listings.map((l) => l.seller_id))];
+  const { data: sellers } = await supabase.from("profiles").select("*").in("id", sellerIds);
+  const sellerById = new Map((sellers ?? []).map((s) => [s.id, s]));
+
+  return listings
+    .map((l) => {
+      const seller = sellerById.get(l.seller_id);
+      if (!seller) return null;
+      return {
+        id: l.id,
+        title: l.title,
+        description: l.description,
+        price: Number(l.price),
+        category: l.category,
+        created_at: l.created_at,
+        seller,
+      };
+    })
+    .filter((l): l is Listing => l !== null);
+}
+
+export async function createListing(
+  sellerId: string,
+  title: string,
+  description: string,
+  price: number,
+  category: string
+) {
+  const { error } = await supabase
+    .from("marketplace_listings")
+    .insert({ seller_id: sellerId, title, description: description || null, price, category: category || null });
+  if (error) throw error;
+}
+
+// ---------- events ----------
+
+export type VyroEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  starts_at: string;
+  created_at: string;
+  host: Profile;
+  going_count: number;
+  my_status: "going" | "interested" | null;
+};
+
+export async function listEvents(userId: string): Promise<VyroEvent[]> {
+  const { data: events, error } = await supabase
+    .from("events")
+    .select("id, title, description, location, starts_at, created_at, host_id")
+    .order("starts_at", { ascending: true });
+  if (error) throw error;
+  if (!events || events.length === 0) return [];
+
+  const hostIds = [...new Set(events.map((e) => e.host_id))];
+  const eventIds = events.map((e) => e.id);
+  const [{ data: hosts }, { data: rsvps }] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", hostIds),
+    supabase.from("event_rsvps").select("event_id, user_id, status").in("event_id", eventIds),
+  ]);
+  const hostById = new Map((hosts ?? []).map((h) => [h.id, h]));
+  const goingCounts = new Map<string, number>();
+  const myStatus = new Map<string, "going" | "interested">();
+  for (const r of rsvps ?? []) {
+    if (r.status === "going") goingCounts.set(r.event_id, (goingCounts.get(r.event_id) ?? 0) + 1);
+    if (r.user_id === userId) myStatus.set(r.event_id, r.status as "going" | "interested");
+  }
+
+  return events
+    .map((e) => {
+      const host = hostById.get(e.host_id);
+      if (!host) return null;
+      return {
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        location: e.location,
+        starts_at: e.starts_at,
+        created_at: e.created_at,
+        host,
+        going_count: goingCounts.get(e.id) ?? 0,
+        my_status: myStatus.get(e.id) ?? null,
+      };
+    })
+    .filter((e): e is VyroEvent => e !== null);
+}
+
+export async function createEvent(
+  hostId: string,
+  title: string,
+  description: string,
+  location: string,
+  startsAt: string
+) {
+  const { error } = await supabase
+    .from("events")
+    .insert({ host_id: hostId, title, description: description || null, location: location || null, starts_at: startsAt });
+  if (error) throw error;
+}
+
+export async function setRsvp(eventId: string, userId: string, status: "going" | "interested" | null) {
+  if (status === null) {
+    const { error } = await supabase.from("event_rsvps").delete().eq("event_id", eventId).eq("user_id", userId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from("event_rsvps").upsert({ event_id: eventId, user_id: userId, status });
+  if (error) throw error;
+}
+
+// ---------- stories ----------
+
+export type StoryWithAuthor = {
+  id: string;
+  caption: string;
+  created_at: string;
+  author: Profile;
+};
+
+export async function listActiveStories(): Promise<StoryWithAuthor[]> {
+  const { data: stories, error } = await supabase
+    .from("stories")
+    .select("id, caption, created_at, author_id")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!stories || stories.length === 0) return [];
+
+  const authorIds = [...new Set(stories.map((s) => s.author_id))];
+  const { data: authors } = await supabase.from("profiles").select("*").in("id", authorIds);
+  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
+
+  return stories
+    .map((s) => {
+      const author = authorById.get(s.author_id);
+      if (!author) return null;
+      return { id: s.id, caption: s.caption, created_at: s.created_at, author };
+    })
+    .filter((s): s is StoryWithAuthor => s !== null);
+}
+
+export async function createStory(authorId: string, caption: string) {
+  const { error } = await supabase.from("stories").insert({ author_id: authorId, caption });
+  if (error) throw error;
+}
+
+export async function recordStoryView(storyId: string, viewerId: string) {
+  const { error } = await supabase.from("story_views").upsert({ story_id: storyId, viewer_id: viewerId });
+  if (error) throw error;
+}
+
+export async function listSeenStoryIds(viewerId: string): Promise<Set<string>> {
+  const { data } = await supabase.from("story_views").select("story_id").eq("viewer_id", viewerId);
+  return new Set((data ?? []).map((v) => v.story_id));
+}
+
+// ---------- wallet / gifts ----------
+
+export async function getCoinBalance(userId: string): Promise<number> {
+  const { data } = await supabase.from("profiles").select("coins").eq("id", userId).single();
+  return data?.coins ?? 0;
+}
+
+export type CoinTransaction = { id: string; delta: number; reason: string; created_at: string };
+
+export async function listTransactions(userId: string): Promise<CoinTransaction[]> {
+  const { data, error } = await supabase
+    .from("coin_transactions")
+    .select("id, delta, reason, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function sendGift(receiverId: string, giftKey: string, coinCost: number) {
+  const { error } = await supabase.rpc("send_gift", {
+    p_receiver_id: receiverId,
+    p_gift_key: giftKey,
+    p_coin_cost: coinCost,
+  });
+  if (error) throw error;
+}
+
+// ---------- creator studio ----------
+
+export type CreatorStats = {
+  followers: number;
+  following: number;
+  posts: number;
+  totalLikes: number;
+  totalComments: number;
+};
+
+export async function getCreatorStats(userId: string): Promise<CreatorStats> {
+  const [followers, following, myPosts] = await Promise.all([
+    countFollowers(userId),
+    countFollowing(userId),
+    supabase.from("posts").select("id").eq("author_id", userId),
+  ]);
+  const postIds = (myPosts.data ?? []).map((p) => p.id);
+  if (postIds.length === 0) {
+    return { followers, following, posts: 0, totalLikes: 0, totalComments: 0 };
+  }
+  const [{ count: totalLikes }, { count: totalComments }] = await Promise.all([
+    supabase.from("post_likes").select("*", { count: "exact", head: true }).in("post_id", postIds),
+    supabase.from("post_comments").select("*", { count: "exact", head: true }).in("post_id", postIds),
+  ]);
+  return {
+    followers,
+    following,
+    posts: postIds.length,
+    totalLikes: totalLikes ?? 0,
+    totalComments: totalComments ?? 0,
+  };
+}
+
+// ---------- calls ----------
+
+export async function logCall(
+  callerId: string,
+  calleeId: string,
+  kind: "voice" | "video",
+  outcome: "completed" | "missed" | "declined",
+  durationSeconds: number
+) {
+  const { error } = await supabase
+    .from("call_logs")
+    .insert({ caller_id: callerId, callee_id: calleeId, kind, outcome, duration_seconds: durationSeconds });
+  if (error) throw error;
+}
+
+export type CallLogEntry = {
+  id: string;
+  kind: string;
+  outcome: string;
+  created_at: string;
+  other: Profile;
+  direction: "in" | "out";
+};
+
+export async function listCallLogs(userId: string): Promise<CallLogEntry[]> {
+  const { data, error } = await supabase
+    .from("call_logs")
+    .select("id, kind, outcome, created_at, caller_id, callee_id")
+    .or(`caller_id.eq.${userId},callee_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const otherIds = [...new Set(data.map((c) => (c.caller_id === userId ? c.callee_id : c.caller_id)))];
+  const { data: others } = await supabase.from("profiles").select("*").in("id", otherIds);
+  const otherById = new Map((others ?? []).map((o) => [o.id, o]));
+
+  return data
+    .map((c) => {
+      const otherId = c.caller_id === userId ? c.callee_id : c.caller_id;
+      const other = otherById.get(otherId);
+      if (!other) return null;
+      return {
+        id: c.id,
+        kind: c.kind,
+        outcome: c.outcome,
+        created_at: c.created_at,
+        other,
+        direction: (c.caller_id === userId ? "out" : "in") as "in" | "out",
+      };
+    })
+    .filter((c): c is CallLogEntry => c !== null);
 }
