@@ -26,7 +26,9 @@ import { Wallet } from "./screens/Wallet";
 import { CreatorStudio } from "./screens/CreatorStudio";
 import { StoryViewer } from "./screens/StoryViewer";
 import { Live } from "./screens/Live";
-import { LiveView } from "./screens/LiveView";
+import { GoLive } from "./screens/GoLive";
+import { LiveRoom } from "./screens/LiveRoom";
+import { LiveReplay } from "./screens/LiveReplay";
 import { VoiceCall } from "./screens/VoiceCall";
 import { VideoCall } from "./screens/VideoCall";
 
@@ -64,7 +66,7 @@ export default function App() {
                   <Route path="/create/reel" element={<ComingSoon title="Short Video" description="Camera, effects, filters and trimming." />} />
 
                   <Route path="/live" element={<Live />} />
-                  <Route path="/live/go" element={<ComingSoon title="Go Live" description="Public, friends-only or private live streaming." />} />
+                  <Route path="/live/go" element={<GoLive />} />
 
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/events" element={<Events />} />
@@ -91,7 +93,8 @@ export default function App() {
                 <Route path="/create/event" element={<CreateEvent />} />
                 <Route path="/create/sell" element={<CreateListing />} />
                 <Route path="/create/story" element={<CreateStory />} />
-                <Route path="/live/:id" element={<LiveView />} />
+                <Route path="/live/:id" element={<LiveRoom />} />
+                <Route path="/live/:id/replay" element={<LiveReplay />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

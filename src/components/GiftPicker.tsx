@@ -7,19 +7,21 @@ export function GiftPicker({
   receiverId,
   receiverName,
   myCoins,
+  liveId,
   onClose,
   onSent,
 }: {
   receiverId: string;
   receiverName: string;
   myCoins: number;
+  liveId?: string;
   onClose: () => void;
-  onSent: () => void;
+  onSent: (giftKey: string, giftEmoji: string) => void;
 }) {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSend = async (giftId: string, price: number) => {
+  const handleSend = async (giftId: string, price: number, emoji: string) => {
     setError(null);
     if (price > myCoins) {
       setError("Not enough coins for this gift.");
@@ -27,8 +29,8 @@ export function GiftPicker({
     }
     setSendingId(giftId);
     try {
-      await sendGift(receiverId, giftId, price);
-      onSent();
+      await sendGift(receiverId, giftId, price, liveId);
+      onSent(giftId, emoji);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't send the gift.");
@@ -54,7 +56,7 @@ export function GiftPicker({
           {giftCatalog.map((g) => (
             <button
               key={g.id}
-              onClick={() => handleSend(g.id, g.price)}
+              onClick={() => handleSend(g.id, g.price, g.emoji)}
               disabled={sendingId !== null}
               className="flex flex-col items-center gap-1 rounded-2xl glass-card p-3 disabled:opacity-50"
             >

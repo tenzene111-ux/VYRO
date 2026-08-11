@@ -716,11 +716,12 @@ export async function listTransactions(userId: string): Promise<CoinTransaction[
   return data ?? [];
 }
 
-export async function sendGift(receiverId: string, giftKey: string, coinCost: number) {
+export async function sendGift(receiverId: string, giftKey: string, coinCost: number, liveId?: string) {
   const { error } = await supabase.rpc("send_gift", {
     p_receiver_id: receiverId,
     p_gift_key: giftKey,
     p_coin_cost: coinCost,
+    p_live_id: liveId ?? null,
   });
   if (error) throw error;
 }
@@ -811,4 +812,472 @@ export async function listCallLogs(userId: string): Promise<CallLogEntry[]> {
       };
     })
     .filter((c): c is CallLogEntry => c !== null);
+}
+
+// ---------- live streaming ----------
+
+export type LiveSession = Database["public"]["Tables"]["live_sessions"]["Row"];
+export type LiveSessionWithHost = LiveSession & { host: Profile };
+
+export async function createLiveSession(
+  hostId: string,
+  title: string,
+  category: string,
+  privacy: "public" | "followers" | "private"
+): Promise<LiveSession> {
+  const { data, error } = await supabase
+    .from("live_sessions")
+    .insert({ host_id: hostId, title, category, privacy })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function goLive(liveId: string) {
+  const { error } = await supabase
+    .from("live_sessions")
+    .update({ status: "live", started_at: new Date().toISOString() })
+    .eq("id", liveId);
+  if (error) throw error;
+}
+
+export async function endLive(liveId: string) {
+  const { error } = await supabase
+    .from("live_sessions")
+    .update({ status: "ended", ended_at: new Date().toISOString() })
+    .eq("id", liveId);
+  if (error) throw error;
+}
+
+export async function updatePeakViewers(liveId: string, count: number) {
+  const { data: current } = await supabase.from("live_sessions").select("peak_viewers").eq("id", liveId).single();
+  if (current && count > current.peak_viewers) {
+    await supabase.from("live_sessions").update({ peak_viewers: count }).eq("id", liveId);
+  }
+}
+
+export async function setReplay(liveId: string, replayUrl: string) {
+  const { error } = await supabase
+    .from("live_sessions")
+    .update({ replay_url: replayUrl, replay_ready: true, status: "replay_ready" })
+    .eq("id", liveId);
+  if (error) throw error;
+}
+
+async function hydrateLiveSessions(sessions: LiveSession[]): Promise<LiveSessionWithHost[]> {
+  if (sessions.length === 0) return [];
+  const hostIds = [...new Set(sessions.map((s) => s.host_id))];
+  const { data: hosts } = await supabase.from("profiles").select("*").in("id", hostIds);
+  const hostById = new Map((hosts ?? []).map((h) => [h.id, h]));
+  return sessions
+    .map((s) => {
+      const host = hostById.get(s.host_id);
+      if (!host) return null;
+      return { ...s, host };
+    })
+    .filter((s): s is LiveSessionWithHost => s !== null);
+}
+
+export async function getLiveSession(liveId: string): Promise<LiveSessionWithHost | null> {
+  const { data } = await supabase.from("live_sessions").select("*").eq("id", liveId).single();
+  if (!data) return null;
+  const hydrated = await hydrateLiveSessions([data]);
+  return hydrated[0] ?? null;
+}
+
+export async function listLiveNow(userId: string): Promise<LiveSessionWithHost[]> {
+  const { data, error } = await supabase
+    .from("live_sessions")
+    .select("*")
+    .eq("status", "live")
+    .order("started_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const hydrated = await hydrateLiveSessions(data ?? []);
+
+  const following = await listFollowing(userId);
+  return hydrated.sort((a, b) => {
+    const aFollowed = following.has(a.host_id) ? 1 : 0;
+    const bFollowed = following.has(b.host_id) ? 1 : 0;
+    if (aFollowed !== bFollowed) return bFollowed - aFollowed;
+    if (a.peak_viewers !== b.peak_viewers) return b.peak_viewers - a.peak_viewers;
+    return (b.started_at ?? "").localeCompare(a.started_at ?? "");
+  });
+}
+
+export async function listMyLiveHistory(hostId: string): Promise<LiveSession[]> {
+  const { data, error } = await supabase
+    .from("live_sessions")
+    .select("*")
+    .eq("host_id", hostId)
+    .neq("status", "created")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ---------- live chat ----------
+
+export type LiveMessage = { id: string; text: string; pinned: boolean; created_at: string; sender: Profile };
+
+export async function listLiveMessages(liveId: string): Promise<LiveMessage[]> {
+  const { data, error } = await supabase
+    .from("live_messages")
+    .select("id, text, pinned, created_at, sender_id")
+    .eq("live_id", liveId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+  const senderIds = [...new Set(data.map((m) => m.sender_id))];
+  const { data: senders } = await supabase.from("profiles").select("*").in("id", senderIds);
+  const senderById = new Map((senders ?? []).map((s) => [s.id, s]));
+  return data
+    .map((m) => {
+      const sender = senderById.get(m.sender_id);
+      if (!sender) return null;
+      return { id: m.id, text: m.text, pinned: m.pinned, created_at: m.created_at, sender };
+    })
+    .filter((m): m is LiveMessage => m !== null);
+}
+
+export async function sendLiveMessage(liveId: string, senderId: string, text: string) {
+  const { error } = await supabase.from("live_messages").insert({ live_id: liveId, sender_id: senderId, text });
+  if (error) throw error;
+}
+
+export function subscribeToLiveMessages(liveId: string, onInsert: (raw: { id: string; sender_id: string; text: string; pinned: boolean; created_at: string }) => void) {
+  const channel = supabase
+    .channel(`live-messages:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "live_messages", filter: `live_id=eq.${liveId}` },
+      (payload) => onInsert(payload.new as { id: string; sender_id: string; text: string; pinned: boolean; created_at: string })
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function pinLiveMessage(messageId: string, pinned: boolean) {
+  const { error } = await supabase.from("live_messages").update({ pinned }).eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function deleteLiveMessage(messageId: string) {
+  const { error } = await supabase.from("live_messages").delete().eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function blockLiveViewer(liveId: string, userId: string) {
+  const { error } = await supabase.from("live_blocked_viewers").insert({ live_id: liveId, user_id: userId });
+  if (error) throw error;
+}
+
+// ---------- viewer session tracking (real analytics) ----------
+
+export async function joinLiveAsViewer(liveId: string, viewerId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("live_viewer_sessions")
+    .insert({ live_id: liveId, viewer_id: viewerId })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function leaveLiveAsViewer(viewerSessionId: string) {
+  await supabase.from("live_viewer_sessions").update({ left_at: new Date().toISOString() }).eq("id", viewerSessionId);
+}
+
+export type LiveAnalytics = {
+  peakViewers: number;
+  uniqueViewers: number;
+  avgWatchSeconds: number;
+  totalGiftCoins: number;
+  newFollowers: number;
+  durationSeconds: number;
+};
+
+export async function getLiveAnalytics(live: LiveSession): Promise<LiveAnalytics> {
+  const [{ data: viewerSessions }, { data: gifts }] = await Promise.all([
+    supabase.from("live_viewer_sessions").select("viewer_id, joined_at, left_at").eq("live_id", live.id),
+    supabase.from("gifts_sent").select("coin_cost").eq("live_id", live.id),
+  ]);
+
+  const uniqueViewers = new Set((viewerSessions ?? []).map((v) => v.viewer_id)).size;
+  const watchTimes = (viewerSessions ?? []).map((v) => {
+    const end = v.left_at ? new Date(v.left_at).getTime() : Date.now();
+    return Math.max(0, (end - new Date(v.joined_at).getTime()) / 1000);
+  });
+  const avgWatchSeconds = watchTimes.length > 0 ? watchTimes.reduce((a, b) => a + b, 0) / watchTimes.length : 0;
+  const totalGiftCoins = (gifts ?? []).reduce((sum, g) => sum + g.coin_cost, 0);
+  const durationSeconds =
+    live.started_at && live.ended_at
+      ? (new Date(live.ended_at).getTime() - new Date(live.started_at).getTime()) / 1000
+      : 0;
+
+  return {
+    peakViewers: live.peak_viewers,
+    uniqueViewers,
+    avgWatchSeconds: Math.round(avgWatchSeconds),
+    totalGiftCoins,
+    newFollowers: 0,
+    durationSeconds: Math.round(durationSeconds),
+  };
+}
+
+// ---------- polls ----------
+
+export type LivePoll = {
+  id: string;
+  live_id: string;
+  question: string;
+  options: string[];
+  closed_at: string | null;
+  created_at: string;
+};
+
+export async function createLivePoll(liveId: string, question: string, options: string[]): Promise<LivePoll> {
+  const { data, error } = await supabase
+    .from("live_polls")
+    .insert({ live_id: liveId, question, options })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return { ...data, options: data.options as string[] };
+}
+
+export async function getActiveLivePoll(liveId: string): Promise<LivePoll | null> {
+  const { data } = await supabase
+    .from("live_polls")
+    .select("*")
+    .eq("live_id", liveId)
+    .is("closed_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return { ...data, options: data.options as string[] };
+}
+
+export async function closeLivePoll(pollId: string) {
+  const { error } = await supabase.from("live_polls").update({ closed_at: new Date().toISOString() }).eq("id", pollId);
+  if (error) throw error;
+}
+
+export async function voteLivePoll(pollId: string, userId: string, optionIndex: number) {
+  const { error } = await supabase.from("live_poll_votes").insert({ poll_id: pollId, user_id: userId, option_index: optionIndex });
+  if (error) throw error;
+}
+
+export async function getLivePollVotes(pollId: string): Promise<{ option_index: number; user_id: string }[]> {
+  const { data, error } = await supabase.from("live_poll_votes").select("option_index, user_id").eq("poll_id", pollId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export function subscribeToLivePollVotes(pollId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`live-poll-votes:${pollId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_poll_votes", filter: `poll_id=eq.${pollId}` }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ---------- co-host / guests ----------
+
+export type LiveGuest = { id: string; status: string; joined_at: string | null; guest: Profile };
+
+export async function inviteLiveGuest(liveId: string, guestId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("live_guests")
+    .insert({ live_id: liveId, guest_id: guestId })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function respondToGuestInvite(guestRowId: string, accept: boolean) {
+  const { error } = await supabase
+    .from("live_guests")
+    .update({ status: accept ? "accepted" : "declined", joined_at: accept ? new Date().toISOString() : null })
+    .eq("id", guestRowId);
+  if (error) throw error;
+}
+
+export async function removeLiveGuest(guestRowId: string) {
+  const { error } = await supabase
+    .from("live_guests")
+    .update({ status: "removed", left_at: new Date().toISOString() })
+    .eq("id", guestRowId);
+  if (error) throw error;
+}
+
+export async function listLiveGuests(liveId: string): Promise<LiveGuest[]> {
+  const { data, error } = await supabase
+    .from("live_guests")
+    .select("id, status, joined_at, guest_id")
+    .eq("live_id", liveId)
+    .in("status", ["invited", "accepted"]);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+  const guestIds = data.map((g) => g.guest_id);
+  const { data: guests } = await supabase.from("profiles").select("*").in("id", guestIds);
+  const guestById = new Map((guests ?? []).map((g) => [g.id, g]));
+  return data
+    .map((g) => {
+      const guest = guestById.get(g.guest_id);
+      if (!guest) return null;
+      return { id: g.id, status: g.status, joined_at: g.joined_at, guest };
+    })
+    .filter((g): g is LiveGuest => g !== null);
+}
+
+// ---------- live match / battle ----------
+
+export type LiveMatch = {
+  id: string;
+  live_id_a: string;
+  live_id_b: string;
+  started_at: string;
+  ends_at: string;
+  status: string;
+  winner_live_id: string | null;
+};
+
+export async function createLiveMatch(liveIdA: string, liveIdB: string, durationSeconds: number): Promise<LiveMatch> {
+  const endsAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("live_matches")
+    .insert({ live_id_a: liveIdA, live_id_b: liveIdB, ends_at: endsAt })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getActiveMatchForLive(liveId: string): Promise<LiveMatch | null> {
+  const { data } = await supabase
+    .from("live_matches")
+    .select("*")
+    .or(`live_id_a.eq.${liveId},live_id_b.eq.${liveId}`)
+    .eq("status", "active")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+export async function getMatchScore(matchId: string): Promise<{ scoreA: number; scoreB: number }> {
+  const { data, error } = await supabase.rpc("get_match_score", { p_match_id: matchId });
+  if (error) throw error;
+  const row = data?.[0];
+  return { scoreA: Number(row?.score_a ?? 0), scoreB: Number(row?.score_b ?? 0) };
+}
+
+export async function endLiveMatch(matchId: string, winnerLiveId: string | null) {
+  const { error } = await supabase.from("live_matches").update({ status: "ended", winner_live_id: winnerLiveId }).eq("id", matchId);
+  if (error) throw error;
+}
+
+// ---------- live reports ----------
+
+export async function reportLive(liveId: string, reporterId: string, reason: string, details: string) {
+  const { error } = await supabase
+    .from("live_reports")
+    .insert({ live_id: liveId, reporter_id: reporterId, reason, details: details || null });
+  if (error) throw error;
+}
+
+// ---------- live realtime helpers ----------
+
+export function subscribeToLiveSession(liveId: string, onUpdate: (row: LiveSession) => void) {
+  const channel = supabase
+    .channel(`live-session:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "live_sessions", filter: `id=eq.${liveId}` },
+      (payload) => onUpdate(payload.new as LiveSession)
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function getMyGuestInvite(liveId: string, userId: string): Promise<LiveGuest | null> {
+  const { data } = await supabase
+    .from("live_guests")
+    .select("id, status, joined_at, guest_id")
+    .eq("live_id", liveId)
+    .eq("guest_id", userId)
+    .in("status", ["invited", "accepted"])
+    .maybeSingle();
+  if (!data) return null;
+  const { data: guest } = await supabase.from("profiles").select("*").eq("id", userId).single();
+  if (!guest) return null;
+  return { id: data.id, status: data.status, joined_at: data.joined_at, guest };
+}
+
+export function subscribeToLiveGuests(liveId: string, onChange: (row: { id: string; guest_id: string; status: string }) => void) {
+  const channel = supabase
+    .channel(`live-guests:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "live_guests", filter: `live_id=eq.${liveId}` },
+      (payload) => onChange((payload.new ?? payload.old) as { id: string; guest_id: string; status: string })
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export type LiveGiftEvent = { sender: Profile; gift_key: string; coin_cost: number; created_at: string };
+
+export function subscribeToLiveGifts(liveId: string, onGift: (event: LiveGiftEvent) => void) {
+  const channel = supabase
+    .channel(`live-gifts:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "gifts_sent", filter: `live_id=eq.${liveId}` },
+      async (payload) => {
+        const row = payload.new as { sender_id: string; gift_key: string; coin_cost: number; created_at: string };
+        const { data: sender } = await supabase.from("profiles").select("*").eq("id", row.sender_id).single();
+        if (sender) onGift({ sender, gift_key: row.gift_key, coin_cost: row.coin_cost, created_at: row.created_at });
+      }
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToLiveMatchesFor(liveId: string, onChange: (row: LiveMatch) => void) {
+  const channelA = supabase
+    .channel(`live-match-a:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "live_matches", filter: `live_id_a=eq.${liveId}` },
+      (payload) => onChange((payload.new ?? payload.old) as LiveMatch)
+    )
+    .subscribe();
+  const channelB = supabase
+    .channel(`live-match-b:${liveId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "live_matches", filter: `live_id_b=eq.${liveId}` },
+      (payload) => onChange((payload.new ?? payload.old) as LiveMatch)
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channelA);
+    supabase.removeChannel(channelB);
+  };
 }

@@ -391,6 +391,7 @@ export type Database = {
           receiver_id: string;
           gift_key: string;
           coin_cost: number;
+          live_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -399,6 +400,7 @@ export type Database = {
           receiver_id: string;
           gift_key: string;
           coin_cost: number;
+          live_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -407,7 +409,233 @@ export type Database = {
           receiver_id?: string;
           gift_key?: string;
           coin_cost?: number;
+          live_id?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      live_sessions: {
+        Row: {
+          id: string;
+          host_id: string;
+          title: string;
+          category: string;
+          privacy: string;
+          status: string;
+          room_name: string;
+          started_at: string | null;
+          ended_at: string | null;
+          peak_viewers: number;
+          replay_url: string | null;
+          replay_ready: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          host_id: string;
+          title: string;
+          category?: string;
+          privacy?: string;
+          status?: string;
+          room_name?: string;
+          started_at?: string | null;
+          ended_at?: string | null;
+          peak_viewers?: number;
+          replay_url?: string | null;
+          replay_ready?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          host_id?: string;
+          title?: string;
+          category?: string;
+          privacy?: string;
+          status?: string;
+          room_name?: string;
+          started_at?: string | null;
+          ended_at?: string | null;
+          peak_viewers?: number;
+          replay_url?: string | null;
+          replay_ready?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      live_guests: {
+        Row: {
+          id: string;
+          live_id: string;
+          guest_id: string;
+          status: string;
+          invited_at: string;
+          joined_at: string | null;
+          left_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          live_id: string;
+          guest_id: string;
+          status?: string;
+          invited_at?: string;
+          joined_at?: string | null;
+          left_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          live_id?: string;
+          guest_id?: string;
+          status?: string;
+          invited_at?: string;
+          joined_at?: string | null;
+          left_at?: string | null;
+        };
+        Relationships: [];
+      };
+      live_viewer_sessions: {
+        Row: {
+          id: string;
+          live_id: string;
+          viewer_id: string;
+          joined_at: string;
+          left_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          live_id: string;
+          viewer_id: string;
+          joined_at?: string;
+          left_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          live_id?: string;
+          viewer_id?: string;
+          joined_at?: string;
+          left_at?: string | null;
+        };
+        Relationships: [];
+      };
+      live_blocked_viewers: {
+        Row: { live_id: string; user_id: string; created_at: string };
+        Insert: { live_id: string; user_id: string; created_at?: string };
+        Update: { live_id?: string; user_id?: string; created_at?: string };
+        Relationships: [];
+      };
+      live_messages: {
+        Row: {
+          id: string;
+          live_id: string;
+          sender_id: string;
+          text: string;
+          pinned: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          live_id: string;
+          sender_id: string;
+          text: string;
+          pinned?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          live_id?: string;
+          sender_id?: string;
+          text?: string;
+          pinned?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      live_polls: {
+        Row: {
+          id: string;
+          live_id: string;
+          question: string;
+          options: Json;
+          created_at: string;
+          closed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          live_id: string;
+          question: string;
+          options: Json;
+          created_at?: string;
+          closed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          live_id?: string;
+          question?: string;
+          options?: Json;
+          created_at?: string;
+          closed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      live_poll_votes: {
+        Row: { poll_id: string; user_id: string; option_index: number; created_at: string };
+        Insert: { poll_id: string; user_id: string; option_index: number; created_at?: string };
+        Update: { poll_id?: string; user_id?: string; option_index?: number; created_at?: string };
+        Relationships: [];
+      };
+      live_reports: {
+        Row: {
+          id: string;
+          live_id: string;
+          reporter_id: string;
+          reason: string;
+          details: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          live_id: string;
+          reporter_id: string;
+          reason: string;
+          details?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          live_id?: string;
+          reporter_id?: string;
+          reason?: string;
+          details?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      live_matches: {
+        Row: {
+          id: string;
+          live_id_a: string;
+          live_id_b: string;
+          started_at: string;
+          ends_at: string;
+          status: string;
+          winner_live_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          live_id_a: string;
+          live_id_b: string;
+          started_at?: string;
+          ends_at: string;
+          status?: string;
+          winner_live_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          live_id_a?: string;
+          live_id_b?: string;
+          started_at?: string;
+          ends_at?: string;
+          status?: string;
+          winner_live_id?: string | null;
         };
         Relationships: [];
       };
@@ -495,8 +723,20 @@ export type Database = {
         Returns: undefined;
       };
       send_gift: {
-        Args: { p_receiver_id: string; p_gift_key: string; p_coin_cost: number };
+        Args: { p_receiver_id: string; p_gift_key: string; p_coin_cost: number; p_live_id?: string | null };
         Returns: undefined;
+      };
+      is_live_host: {
+        Args: { l_id: string };
+        Returns: boolean;
+      };
+      can_view_live: {
+        Args: { l_id: string };
+        Returns: boolean;
+      };
+      get_match_score: {
+        Args: { p_match_id: string };
+        Returns: { score_a: number; score_b: number }[];
       };
     };
     Enums: Record<string, never>;
