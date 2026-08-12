@@ -26,6 +26,11 @@ import { Wallet } from "./screens/Wallet";
 import { CreatorStudio } from "./screens/CreatorStudio";
 import { StoryViewer } from "./screens/StoryViewer";
 import { Live } from "./screens/Live";
+import { ShortsStudio } from "./screens/shorts/ShortsStudio";
+import { ShortsCamera } from "./screens/shorts/ShortsCamera";
+import { ShortsUpload } from "./screens/shorts/ShortsUpload";
+import { ShortsEditor } from "./screens/shorts/ShortsEditor";
+import { ShortsPublish } from "./screens/shorts/ShortsPublish";
 import { GoLive } from "./screens/GoLive";
 import { LiveRoom } from "./screens/LiveRoom";
 import { LiveReplay } from "./screens/LiveReplay";
@@ -63,8 +68,6 @@ export default function App() {
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/profile/:id" element={<Profile />} />
 
-                  <Route path="/create/reel" element={<ComingSoon title="Short Video" description="Camera, effects, filters and trimming." />} />
-
                   <Route path="/live" element={<Live />} />
                   <Route path="/live/go" element={<GoLive />} />
 
@@ -93,6 +96,11 @@ export default function App() {
                 <Route path="/create/event" element={<CreateEvent />} />
                 <Route path="/create/sell" element={<CreateListing />} />
                 <Route path="/create/story" element={<CreateStory />} />
+                <Route path="/create/reel" element={<ShortsStudio />} />
+                <Route path="/create/reel/camera" element={<ShortsCamera />} />
+                <Route path="/create/reel/upload" element={<ShortsUpload />} />
+                <Route path="/create/reel/edit/:id" element={<ShortsEditor />} />
+                <Route path="/create/reel/publish/:id" element={<ShortsPublish />} />
                 <Route path="/live/:id" element={<LiveRoom />} />
                 <Route path="/live/:id/replay" element={<LiveReplay />} />
               </Route>

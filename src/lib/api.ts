@@ -6,6 +6,11 @@ export type FeedPost = {
   id: string;
   text: string;
   image_url: string | null;
+  video_url: string | null;
+  cover_url: string | null;
+  video_duration_seconds: number | null;
+  comments_enabled: boolean;
+  visibility: string;
   created_at: string;
   author: Profile;
   like_count: number;
@@ -39,8 +44,47 @@ export async function createPost(authorId: string, text: string, imageUrl?: stri
   if (error) throw error;
 }
 
+export async function createVideoPost(
+  authorId: string,
+  params: {
+    caption: string;
+    videoUrl: string;
+    coverUrl: string | null;
+    durationSeconds: number;
+    visibility: "everyone" | "followers" | "only_me";
+    commentsEnabled: boolean;
+  }
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("posts")
+    .insert({
+      author_id: authorId,
+      text: params.caption,
+      video_url: params.videoUrl,
+      cover_url: params.coverUrl,
+      video_duration_seconds: params.durationSeconds,
+      visibility: params.visibility,
+      comments_enabled: params.commentsEnabled,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
 function hydrateFeedPosts(
-  posts: { id: string; text: string; image_url: string | null; created_at: string; author_id: string }[],
+  posts: {
+    id: string;
+    text: string;
+    image_url: string | null;
+    video_url: string | null;
+    cover_url: string | null;
+    video_duration_seconds: number | null;
+    comments_enabled: boolean;
+    visibility: string;
+    created_at: string;
+    author_id: string;
+  }[],
   authors: Profile[],
   likes: { post_id: string; user_id: string }[],
   comments: { post_id: string }[],
@@ -68,6 +112,11 @@ function hydrateFeedPosts(
         id: p.id,
         text: p.text,
         image_url: p.image_url,
+        video_url: p.video_url,
+        cover_url: p.cover_url,
+        video_duration_seconds: p.video_duration_seconds,
+        comments_enabled: p.comments_enabled,
+        visibility: p.visibility,
         created_at: p.created_at,
         author,
         like_count: likeInfo.count,
@@ -81,7 +130,7 @@ function hydrateFeedPosts(
 export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> {
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, text, image_url, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, created_at, author_id")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -115,7 +164,7 @@ export async function searchPeopleAndPosts(
     supabase.from("profiles").select("*").or(`name.ilike.%${q}%,username.ilike.%${q}%`).neq("id", currentUserId).limit(20),
     supabase
       .from("posts")
-      .select("id, text, image_url, created_at, author_id")
+      .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, created_at, author_id")
       .ilike("text", `%${q}%`)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -224,12 +273,19 @@ export async function countPosts(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-export type SimplePost = { id: string; text: string; image_url: string | null; created_at: string };
+export type SimplePost = {
+  id: string;
+  text: string;
+  image_url: string | null;
+  video_url: string | null;
+  cover_url: string | null;
+  created_at: string;
+};
 
 export async function listPostsByAuthor(authorId: string): Promise<SimplePost[]> {
   const { data, error } = await supabase
     .from("posts")
-    .select("id, text, image_url, created_at")
+    .select("id, text, image_url, video_url, cover_url, created_at")
     .eq("author_id", authorId)
     .order("created_at", { ascending: false });
   if (error) throw error;

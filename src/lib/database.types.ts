@@ -45,6 +45,11 @@ export type Database = {
           author_id: string;
           text: string;
           image_url: string | null;
+          video_url: string | null;
+          cover_url: string | null;
+          video_duration_seconds: number | null;
+          comments_enabled: boolean;
+          visibility: string;
           created_at: string;
         };
         Insert: {
@@ -52,6 +57,11 @@ export type Database = {
           author_id: string;
           text: string;
           image_url?: string | null;
+          video_url?: string | null;
+          cover_url?: string | null;
+          video_duration_seconds?: number | null;
+          comments_enabled?: boolean;
+          visibility?: string;
           created_at?: string;
         };
         Update: {
@@ -59,6 +69,11 @@ export type Database = {
           author_id?: string;
           text?: string;
           image_url?: string | null;
+          video_url?: string | null;
+          cover_url?: string | null;
+          video_duration_seconds?: number | null;
+          comments_enabled?: boolean;
+          visibility?: string;
           created_at?: string;
         };
         Relationships: [];

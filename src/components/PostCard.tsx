@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2 } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Volume2, VolumeX, Play } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../context/AuthContext";
 import { addComment, listComments, toggleLike, type Comment, type FeedPost } from "../lib/api";
@@ -15,6 +15,9 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentText, setCommentText] = useState("");
   const [posting, setPosting] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(true);
 
   const handleLike = async () => {
     if (!user) return;
@@ -80,7 +83,45 @@ export function PostCard({ post }: { post: FeedPost }) {
 
       {post.text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>}
 
-      {post.image_url && (
+      {post.video_url && (
+        <div className="relative mx-4 mt-3 overflow-hidden rounded-2xl bg-black">
+          <video
+            ref={videoRef}
+            src={post.video_url}
+            poster={post.cover_url ?? undefined}
+            muted={videoMuted}
+            loop
+            playsInline
+            onClick={() => {
+              const v = videoRef.current;
+              if (!v) return;
+              if (v.paused) {
+                v.play();
+                setVideoPlaying(true);
+              } else {
+                v.pause();
+                setVideoPlaying(false);
+              }
+            }}
+            className="max-h-[600px] w-full"
+          />
+          {!videoPlaying && (
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
+              <span className="rounded-full bg-black/40 p-3.5 backdrop-blur">
+                <Play className="h-6 w-6 text-white" />
+              </span>
+            </span>
+          )}
+          <button
+            onClick={() => setVideoMuted((m) => !m)}
+            className="absolute bottom-2.5 right-2.5 rounded-full bg-black/45 p-2 text-white backdrop-blur"
+          >
+            {videoMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      )}
+
+      {!post.video_url && post.image_url && (
         <div className="mx-4 mt-3 overflow-hidden rounded-2xl">
           <img src={post.image_url} alt="" className="max-h-[480px] w-full object-cover" />
         </div>
@@ -101,13 +142,20 @@ export function PostCard({ post }: { post: FeedPost }) {
           <Heart className={`h-4.5 w-4.5 ${liked ? "fill-rose-400" : ""}`} />
           {liked ? "Liked" : "Like"}
         </button>
-        <button
-          onClick={handleOpenComments}
-          className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist transition-colors hover:bg-white/5 hover:text-ink"
-        >
-          <MessageSquare className="h-4.5 w-4.5" />
-          Comment
-        </button>
+        {post.comments_enabled ? (
+          <button
+            onClick={handleOpenComments}
+            className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist transition-colors hover:bg-white/5 hover:text-ink"
+          >
+            <MessageSquare className="h-4.5 w-4.5" />
+            Comment
+          </button>
+        ) : (
+          <span className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist/40">
+            <MessageSquare className="h-4.5 w-4.5" />
+            Off
+          </span>
+        )}
         <button className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist transition-colors hover:bg-white/5 hover:text-ink">
           <Share2 className="h-4.5 w-4.5" />
           Share

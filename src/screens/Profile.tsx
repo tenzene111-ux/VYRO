@@ -177,7 +177,16 @@ export function Profile() {
         ) : (
           <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
             {posts.map((p) =>
-              p.image_url ? (
+              p.video_url ? (
+                <div key={p.id} className="relative aspect-square overflow-hidden bg-black">
+                  {p.cover_url ? (
+                    <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <video src={p.video_url} className="h-full w-full object-cover" muted />
+                  )}
+                  <Clapperboard className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" />
+                </div>
+              ) : p.image_url ? (
                 <div key={p.id} className="aspect-square overflow-hidden">
                   <img src={p.image_url} alt="" className="h-full w-full object-cover" />
                 </div>
