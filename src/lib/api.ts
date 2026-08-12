@@ -1,6 +1,40 @@
 import { supabase } from "./supabase";
+import { sendPushNotification } from "./push";
 import type { Profile } from "../context/AuthContext";
 import type { Database } from "./database.types";
+
+async function notifyPostAction(postId: string, actorId: string, kind: "like" | "comment") {
+  const [{ data: post }, { data: actor }] = await Promise.all([
+    supabase.from("posts").select("author_id").eq("id", postId).single(),
+    supabase.from("profiles").select("name").eq("id", actorId).single(),
+  ]);
+  if (!post || !actor || post.author_id === actorId) return;
+  const title = kind === "like" ? `${actor.name} liked your post` : `${actor.name} commented on your post`;
+  await sendPushNotification(post.author_id, title, "", "/home");
+}
+
+async function notifyConversationMembers(conversationId: string, senderId: string, preview: string) {
+  const [{ data: conv }, { data: members }, { data: sender }] = await Promise.all([
+    supabase.from("conversations").select("is_group").eq("id", conversationId).single(),
+    supabase.from("conversation_members").select("user_id").eq("conversation_id", conversationId),
+    supabase.from("profiles").select("name").eq("id", senderId).single(),
+  ]);
+  if (!conv || conv.is_group || !sender) return;
+  const otherId = (members ?? []).find((m) => m.user_id !== senderId)?.user_id;
+  if (!otherId) return;
+  await sendPushNotification(otherId, sender.name, preview, `/chat/${conversationId}`);
+}
+
+async function notifyFollowersLive(hostId: string, liveId: string, title: string) {
+  const [{ data: followers }, { data: host }] = await Promise.all([
+    supabase.from("follows").select("follower_id").eq("following_id", hostId),
+    supabase.from("profiles").select("name").eq("id", hostId).single(),
+  ]);
+  if (!host) return;
+  await Promise.allSettled(
+    (followers ?? []).map((f) => sendPushNotification(f.follower_id, `${host.name} is live now`, title, `/live/${liveId}`))
+  );
+}
 
 export type FeedPost = {
   id: string;
@@ -243,6 +277,7 @@ export async function listComments(postId: string): Promise<Comment[]> {
 export async function addComment(postId: string, authorId: string, text: string) {
   const { error } = await supabase.from("post_comments").insert({ post_id: postId, author_id: authorId, text });
   if (error) throw error;
+  notifyPostAction(postId, authorId, "comment").catch(() => {});
 }
 
 export async function toggleLike(postId: string, userId: string, currentlyLiked: boolean) {
@@ -252,6 +287,7 @@ export async function toggleLike(postId: string, userId: string, currentlyLiked:
   } else {
     const { error } = await supabase.from("post_likes").insert({ post_id: postId, user_id: userId });
     if (error) throw error;
+    notifyPostAction(postId, userId, "like").catch(() => {});
   }
 }
 
@@ -271,7 +307,13 @@ export async function toggleFollow(followerId: string, followingId: string, curr
   } else {
     const { error } = await supabase.from("follows").insert({ follower_id: followerId, following_id: followingId });
     if (error) throw error;
+    notifyFollow(followerId, followingId).catch(() => {});
   }
+}
+
+async function notifyFollow(followerId: string, followingId: string) {
+  const { data: actor } = await supabase.from("profiles").select("name").eq("id", followerId).single();
+  if (actor) await sendPushNotification(followingId, `${actor.name} started following you`, "", `/profile/${followerId}`);
 }
 
 export async function countFollowers(userId: string): Promise<number> {
@@ -452,6 +494,7 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
 export async function sendMessage(conversationId: string, senderId: string, text: string) {
   const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: senderId, text });
   if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, text).catch(() => {});
 }
 
 export async function sendVoiceMessage(
@@ -464,6 +507,7 @@ export async function sendVoiceMessage(
     .from("messages")
     .insert({ conversation_id: conversationId, sender_id: senderId, audio_url: audioUrl, audio_duration_seconds: durationSeconds });
   if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "🎤 Voice message").catch(() => {});
 }
 
 export function subscribeToMessages(conversationId: string, onInsert: (message: ChatMessage) => void) {
@@ -927,11 +971,14 @@ export async function createLiveSession(
 }
 
 export async function goLive(liveId: string) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("live_sessions")
     .update({ status: "live", started_at: new Date().toISOString() })
-    .eq("id", liveId);
+    .eq("id", liveId)
+    .select("host_id, title")
+    .single();
   if (error) throw error;
+  notifyFollowersLive(data.host_id, liveId, data.title).catch(() => {});
 }
 
 export async function endLive(liveId: string) {
