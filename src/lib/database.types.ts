@@ -13,6 +13,7 @@ export type Database = {
           verified: boolean;
           coins: number;
           avatar_url: string | null;
+          public_key_jwk: Json | null;
           created_at: string;
         };
         Insert: {
@@ -24,6 +25,7 @@ export type Database = {
           verified?: boolean;
           coins?: number;
           avatar_url?: string | null;
+          public_key_jwk?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -35,6 +37,7 @@ export type Database = {
           verified?: boolean;
           coins?: number;
           avatar_url?: string | null;
+          public_key_jwk?: Json | null;
           created_at?: string;
         };
         Relationships: [];
@@ -185,6 +188,10 @@ export type Database = {
           text: string | null;
           audio_url: string | null;
           audio_duration_seconds: number | null;
+          ciphertext: string | null;
+          iv: string | null;
+          sender_public_key_jwk: Json | null;
+          recipient_public_key_jwk: Json | null;
           created_at: string;
         };
         Insert: {
@@ -194,6 +201,10 @@ export type Database = {
           text?: string | null;
           audio_url?: string | null;
           audio_duration_seconds?: number | null;
+          ciphertext?: string | null;
+          iv?: string | null;
+          sender_public_key_jwk?: Json | null;
+          recipient_public_key_jwk?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -203,6 +214,10 @@ export type Database = {
           text?: string | null;
           audio_url?: string | null;
           audio_duration_seconds?: number | null;
+          ciphertext?: string | null;
+          iv?: string | null;
+          sender_public_key_jwk?: Json | null;
+          recipient_public_key_jwk?: Json | null;
           created_at?: string;
         };
         Relationships: [];

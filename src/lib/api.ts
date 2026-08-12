@@ -409,14 +409,22 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, text, audio_url, created_at")
+    .select("conversation_id, text, audio_url, ciphertext, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
-  const lastByConversation = new Map<string, { text: string | null; audio_url: string | null; created_at: string }>();
+  const lastByConversation = new Map<
+    string,
+    { text: string | null; audio_url: string | null; ciphertext: string | null; created_at: string }
+  >();
   for (const m of lastMessages ?? []) {
     if (!lastByConversation.has(m.conversation_id)) {
-      lastByConversation.set(m.conversation_id, { text: m.text, audio_url: m.audio_url, created_at: m.created_at });
+      lastByConversation.set(m.conversation_id, {
+        text: m.text,
+        audio_url: m.audio_url,
+        ciphertext: m.ciphertext,
+        created_at: m.created_at,
+      });
     }
   }
 
@@ -429,7 +437,9 @@ export async function listConversations(userId: string): Promise<ChatConversatio
       return {
         id,
         other,
-        last_message: last ? (last.text || (last.audio_url ? "🎤 Voice message" : "")) : null,
+        last_message: last
+          ? last.text || (last.audio_url ? "🎤 Voice message" : last.ciphertext ? "🔒 Encrypted message" : "")
+          : null,
         last_message_at: last?.created_at ?? null,
       };
     })
@@ -478,6 +488,10 @@ export type ChatMessage = {
   text: string | null;
   audio_url: string | null;
   audio_duration_seconds: number | null;
+  ciphertext: string | null;
+  iv: string | null;
+  sender_public_key_jwk: Database["public"]["Tables"]["messages"]["Row"]["sender_public_key_jwk"];
+  recipient_public_key_jwk: Database["public"]["Tables"]["messages"]["Row"]["recipient_public_key_jwk"];
   created_at: string;
 };
 
@@ -508,6 +522,32 @@ export async function sendVoiceMessage(
     .insert({ conversation_id: conversationId, sender_id: senderId, audio_url: audioUrl, audio_duration_seconds: durationSeconds });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🎤 Voice message").catch(() => {});
+}
+
+export async function publishPublicKey(userId: string, jwk: JsonWebKey) {
+  const { error } = await supabase.from("profiles").update({ public_key_jwk: jwk as unknown as Database["public"]["Tables"]["profiles"]["Row"]["public_key_jwk"] }).eq("id", userId);
+  if (error) throw error;
+}
+
+export async function sendEncryptedMessage(
+  conversationId: string,
+  senderId: string,
+  ciphertext: string,
+  iv: string,
+  senderPublicJwk: JsonWebKey,
+  recipientPublicJwk: JsonWebKey
+) {
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    ciphertext,
+    iv,
+    sender_public_key_jwk: senderPublicJwk as unknown as Database["public"]["Tables"]["profiles"]["Row"]["public_key_jwk"],
+    recipient_public_key_jwk: recipientPublicJwk as unknown as Database["public"]["Tables"]["profiles"]["Row"]["public_key_jwk"],
+  });
+  if (error) throw error;
+  // never leak plaintext through the push notification pipeline for an end-to-end encrypted message
+  notifyConversationMembers(conversationId, senderId, "🔒 New message").catch(() => {});
 }
 
 export function subscribeToMessages(conversationId: string, onInsert: (message: ChatMessage) => void) {

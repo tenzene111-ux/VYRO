@@ -1,12 +1,22 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2 } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
-import { getConversationOther, listMessages, sendMessage, sendVoiceMessage, subscribeToMessages, type ChatMessage } from "../../lib/api";
+import {
+  getConversationOther,
+  listMessages,
+  sendMessage,
+  sendVoiceMessage,
+  sendEncryptedMessage,
+  publishPublicKey,
+  subscribeToMessages,
+  type ChatMessage,
+} from "../../lib/api";
+import { ensureKeyPair, deriveSharedKey, encryptText, decryptText } from "../../lib/crypto";
 
 export function Conversation() {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +27,10 @@ export function Conversation() {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [input, setInput] = useState("");
   const [voiceRecording, setVoiceRecording] = useState(false);
+  const [myPublicJwk, setMyPublicJwk] = useState<JsonWebKey | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const encryptionReady = !!(myPublicJwk && other?.public_key_jwk);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -30,6 +43,14 @@ export function Conversation() {
   }, [id, user]);
 
   useEffect(() => {
+    if (!user) return;
+    ensureKeyPair().then(({ publicJwk, isNew }) => {
+      setMyPublicJwk(publicJwk);
+      if (isNew) publishPublicKey(user.id, publicJwk).catch(() => {});
+    });
+  }, [user]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -37,6 +58,17 @@ export function Conversation() {
     if (!input.trim() || !id || !user) return;
     const text = input.trim();
     setInput("");
+    if (encryptionReady && other?.public_key_jwk) {
+      try {
+        const { keyPair } = await ensureKeyPair();
+        const sharedKey = await deriveSharedKey(keyPair.privateKey, other.public_key_jwk as unknown as JsonWebKey);
+        const { ciphertext, iv } = await encryptText(sharedKey, text);
+        await sendEncryptedMessage(id, user.id, ciphertext, iv, myPublicJwk!, other.public_key_jwk as unknown as JsonWebKey);
+        return;
+      } catch {
+        // encryption failed unexpectedly — fall back to plaintext rather than losing the message
+      }
+    }
     await sendMessage(id, user.id, text);
   };
 
@@ -60,7 +92,10 @@ export function Conversation() {
         <Avatar name={other?.name ?? "…"} avatarUrl={other?.avatar_url} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{other?.name ?? "Loading…"}</p>
-          <p className="text-[11px] text-mist">@{other?.username ?? ""}</p>
+          <p className="flex items-center gap-1 text-[11px] text-mist">
+            {encryptionReady && <Lock className="h-2.5 w-2.5 text-emerald-400" />}
+            {encryptionReady ? "End-to-end encrypted" : `@${other?.username ?? ""}`}
+          </p>
         </div>
         {other && (
           <>
@@ -128,6 +163,8 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
       >
         {message.audio_url ? (
           <VoiceMessageBubble url={message.audio_url} duration={message.audio_duration_seconds ?? 0} mine={mine} />
+        ) : message.ciphertext && message.iv ? (
+          <EncryptedText message={message} mine={mine} />
         ) : (
           message.text
         )}
@@ -137,4 +174,32 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
       </div>
     </div>
   );
+}
+
+function EncryptedText({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const theirKeyJwk = mine ? message.recipient_public_key_jwk : message.sender_public_key_jwk;
+        if (!theirKeyJwk || !message.ciphertext || !message.iv) throw new Error("missing key");
+        const { keyPair } = await ensureKeyPair();
+        const sharedKey = await deriveSharedKey(keyPair.privateKey, theirKeyJwk as unknown as JsonWebKey);
+        const plaintext = await decryptText(sharedKey, message.ciphertext, message.iv);
+        if (!cancelled) setText(plaintext);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [message, mine]);
+
+  if (failed) return <span className={mine ? "text-white/70" : "text-mist"}>🔒 Couldn't decrypt this message</span>;
+  if (text === null) return <span className={mine ? "text-white/70" : "text-mist"}>Decrypting…</span>;
+  return <>{text}</>;
 }
