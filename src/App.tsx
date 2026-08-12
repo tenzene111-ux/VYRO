@@ -3,7 +3,6 @@ import { UIProvider } from "./context/UIContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CallProvider } from "./context/CallContext";
 import { Shell } from "./components/Shell";
-import { ComingSoon } from "./components/ComingSoon";
 import { RequireAuth } from "./components/RequireAuth";
 import { IncomingCallOverlay } from "./components/IncomingCallOverlay";
 
@@ -27,6 +26,7 @@ import { CreatorStudio } from "./screens/CreatorStudio";
 import { StoryViewer } from "./screens/StoryViewer";
 import { Live } from "./screens/Live";
 import { VideoFeed } from "./screens/VideoFeed";
+import { PrivacySecurity } from "./screens/PrivacySecurity";
 import { ShortsStudio } from "./screens/shorts/ShortsStudio";
 import { ShortsCamera } from "./screens/shorts/ShortsCamera";
 import { ShortsUpload } from "./screens/shorts/ShortsUpload";
@@ -76,7 +76,7 @@ export default function App() {
                   <Route path="/events" element={<Events />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/studio" element={<CreatorStudio />} />
-                  <Route path="/privacy" element={<ComingSoon title="Privacy & Security" description="Control who sees your world." />} />
+                  <Route path="/privacy" element={<PrivacySecurity />} />
                 </Route>
 
                 <Route path="/chat" element={<ChatShell />}>

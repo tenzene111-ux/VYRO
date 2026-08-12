@@ -4,6 +4,7 @@ import { Mail, Eye, EyeOff, Fingerprint, Loader2 } from "lucide-react";
 import { Logo, LogoMark } from "../components/Logo";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { isPasskeySupported, loginWithPasskey } from "../lib/passkey";
 
 export function Login() {
   const navigate = useNavigate();
@@ -14,6 +15,21 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+
+  const handlePasskeyLogin = async () => {
+    setError(null);
+    setNotice(null);
+    setPasskeyBusy(true);
+    try {
+      await loginWithPasskey();
+      navigate("/home");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't sign in with a passkey.");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
 
   const handleLogin = async () => {
     setError(null);
@@ -99,6 +115,24 @@ export function Login() {
         {busy && <Loader2 className="h-4 w-4 animate-spin" />}
         Log In
       </button>
+
+      {isPasskeySupported() && (
+        <>
+          <div className="mt-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[11px] text-mist">or</span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+          <button
+            onClick={handlePasskeyLogin}
+            disabled={passkeyBusy}
+            className="mt-4 flex items-center justify-center gap-2 rounded-full chip py-3.5 text-sm font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            {passkeyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4.5 w-4.5" />}
+            Sign in with Passkey
+          </button>
+        </>
+      )}
 
       <p className="mt-8 pb-8 text-center text-[13px] text-mist">
         New to VYRO?{" "}

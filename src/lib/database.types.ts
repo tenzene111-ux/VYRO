@@ -672,6 +672,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      passkeys: {
+        Row: {
+          id: string;
+          user_id: string;
+          credential_id: string;
+          public_key: string;
+          counter: number;
+          device_type: string | null;
+          backed_up: boolean;
+          transports: string[] | null;
+          name: string | null;
+          created_at: string;
+          last_used_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          credential_id: string;
+          public_key: string;
+          counter?: number;
+          device_type?: string | null;
+          backed_up?: boolean;
+          transports?: string[] | null;
+          name?: string | null;
+          created_at?: string;
+          last_used_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          credential_id?: string;
+          public_key?: string;
+          counter?: number;
+          device_type?: string | null;
+          backed_up?: boolean;
+          transports?: string[] | null;
+          name?: string | null;
+          created_at?: string;
+          last_used_at?: string | null;
+        };
+        Relationships: [];
+      };
       live_matches: {
         Row: {
           id: string;
