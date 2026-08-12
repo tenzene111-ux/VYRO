@@ -13,15 +13,32 @@ import {
   Captions,
   X,
   Check,
+  Wand2,
+  Glasses,
 } from "lucide-react";
+import type { ImageSegmenter, FaceLandmarker } from "@mediapipe/tasks-vision";
 import { createEmptyProject, clipDuration, type ShortClip, type CaptionSegment } from "../../lib/shorts/types";
 import { saveProject, putBlob } from "../../lib/shorts/db";
 import { filterPresets, applyPreset, filterToCss, drawVignette, drawGrain } from "../../lib/shorts/filters";
 import { formatDuration } from "../../lib/shorts/media";
 import { isLiveCaptionSupported, startLiveTranscription } from "../../lib/shorts/speech";
+import { getSegmenter, getFaceLandmarker, segmentFrame, detectFaceBox, type PersonMask, type FaceBox } from "../../lib/ar/vision";
+import { drawGradientBackground } from "../../lib/ar/backgrounds";
+import { scenicGradients } from "../../lib/gradients";
 
 const DURATION_OPTIONS = [15, 30, 60, 180];
 const TIMER_OPTIONS = [0, 3, 10];
+const BACKGROUND_OPTIONS: { key: string; label: string }[] = [
+  { key: "none", label: "None" },
+  { key: "blur", label: "Blur" },
+  ...scenicGradients.map((_, i) => ({ key: `bg${i}`, label: `Scene ${i + 1}` })),
+];
+const AR_STICKERS: { key: string; emoji: string; label: string; yOffsetFactor: number; scale: number }[] = [
+  { key: "glasses", emoji: "🕶️", label: "Glasses", yOffsetFactor: -0.05, scale: 1.3 },
+  { key: "crown", emoji: "👑", label: "Crown", yOffsetFactor: -0.75, scale: 1.1 },
+  { key: "ears", emoji: "🐰", label: "Bunny", yOffsetFactor: -0.85, scale: 1.2 },
+  { key: "sparkle", emoji: "✨", label: "Sparkle", yOffsetFactor: -0.55, scale: 0.9 },
+];
 
 type ClipThumb = ShortClip & { thumbnail: string };
 
@@ -48,6 +65,20 @@ export function ShortsCamera() {
   const [filterKey, setFilterKey] = useState("natural");
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [backgroundKey, setBackgroundKey] = useState("none");
+  const [arSticker, setArSticker] = useState<string | null>(null);
+  const [showBackgroundPanel, setShowBackgroundPanel] = useState(false);
+  const [showArPanel, setShowArPanel] = useState(false);
+  const [arLoading, setArLoading] = useState(false);
+
+  const personCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const segmenterRef = useRef<ImageSegmenter | null>(null);
+  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
+  const lastMaskRef = useRef<PersonMask | null>(null);
+  const lastFaceBoxRef = useRef<FaceBox | null>(null);
+  const mlFrameRef = useRef(0);
+  const mlBusyRef = useRef(false);
   const [maxDurationSec, setMaxDurationSec] = useState(60);
   const [timerSec, setTimerSec] = useState(0);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -103,6 +134,39 @@ export function ShortsCamera() {
     };
   }, [facingMode]);
 
+  // ---------- lazy-load AR/background ML models on first use ----------
+  useEffect(() => {
+    if (backgroundKey === "none") return;
+    if (segmenterRef.current) return;
+    let cancelled = false;
+    setArLoading(true);
+    getSegmenter()
+      .then((s) => {
+        if (!cancelled) segmenterRef.current = s;
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setArLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [backgroundKey]);
+
+  useEffect(() => {
+    if (!arSticker) return;
+    if (faceLandmarkerRef.current) return;
+    let cancelled = false;
+    setArLoading(true);
+    getFaceLandmarker()
+      .then((f) => {
+        if (!cancelled) faceLandmarkerRef.current = f;
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setArLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [arSticker]);
+
   // ---------- draw loop (canvas is both the live preview AND the recorded source) ----------
   useEffect(() => {
     if (!ready) return;
@@ -139,17 +203,118 @@ export function ShortsCamera() {
           sw = zw;
           sh = zh;
         }
-        ctx.save();
-        ctx.filter = filterToCss(filter);
-        if (facingMode === "user") {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
+
+        const useBackground = backgroundKey !== "none" && !!segmenterRef.current;
+        const useAr = !!arSticker && !!faceLandmarkerRef.current;
+
+        if (useBackground || useAr) mlFrameRef.current++;
+        const runMl = (useBackground || useAr) && mlFrameRef.current % 3 === 0 && !mlBusyRef.current;
+
+        if (runMl) {
+          mlBusyRef.current = true;
+          try {
+            if (useBackground && segmenterRef.current) {
+              const result = segmentFrame(segmenterRef.current, video, performance.now());
+              if (result) {
+                lastMaskRef.current = result;
+                if (!maskCanvasRef.current) maskCanvasRef.current = document.createElement("canvas");
+                const mc = maskCanvasRef.current;
+                mc.width = result.width;
+                mc.height = result.height;
+                const mctx = mc.getContext("2d");
+                if (mctx) {
+                  const imgData = mctx.createImageData(result.width, result.height);
+                  for (let i = 0; i < result.data.length; i++) {
+                    const v = Math.max(0, Math.min(255, Math.round(result.data[i] * 255)));
+                    imgData.data[i * 4] = 255;
+                    imgData.data[i * 4 + 1] = 255;
+                    imgData.data[i * 4 + 2] = 255;
+                    imgData.data[i * 4 + 3] = v;
+                  }
+                  mctx.putImageData(imgData, 0, 0);
+                }
+              }
+            }
+            if (useAr && faceLandmarkerRef.current) {
+              lastFaceBoxRef.current = detectFaceBox(faceLandmarkerRef.current, video, performance.now());
+            }
+          } finally {
+            mlBusyRef.current = false;
+          }
         }
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-        ctx.filter = "none";
+
+        if (useBackground && lastMaskRef.current && maskCanvasRef.current) {
+          if (!personCanvasRef.current) personCanvasRef.current = document.createElement("canvas");
+          const personCanvas = personCanvasRef.current;
+          personCanvas.width = canvas.width;
+          personCanvas.height = canvas.height;
+          const pctx = personCanvas.getContext("2d");
+          if (pctx) {
+            pctx.clearRect(0, 0, canvas.width, canvas.height);
+            pctx.save();
+            pctx.filter = filterToCss(filter);
+            if (facingMode === "user") {
+              pctx.translate(canvas.width, 0);
+              pctx.scale(-1, 1);
+            }
+            pctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            pctx.restore();
+            pctx.filter = "none";
+            pctx.globalCompositeOperation = "destination-in";
+            pctx.drawImage(maskCanvasRef.current, 0, 0, canvas.width, canvas.height);
+            pctx.globalCompositeOperation = "source-over";
+          }
+
+          ctx.save();
+          if (backgroundKey === "blur") {
+            ctx.filter = "blur(26px)";
+            if (facingMode === "user") {
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            ctx.filter = "none";
+          } else {
+            const idx = Number(backgroundKey.replace("bg", ""));
+            drawGradientBackground(ctx, canvas.width, canvas.height, scenicGradients[idx] ?? scenicGradients[0]);
+          }
+          ctx.restore();
+          ctx.drawImage(personCanvas, 0, 0);
+        } else {
+          ctx.save();
+          ctx.filter = filterToCss(filter);
+          if (facingMode === "user") {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+          ctx.filter = "none";
+        }
+
         drawVignette(ctx, canvas.width, canvas.height, filter.vignette);
         drawGrain(ctx, canvas.width, canvas.height, filter.grain);
+
+        if (useAr && lastFaceBoxRef.current) {
+          const box = lastFaceBoxRef.current;
+          const sticker = AR_STICKERS.find((s) => s.key === arSticker);
+          if (sticker) {
+            const px = box.centerX * vw;
+            const py = box.centerY * vh;
+            let cnx = (px - sx) / sw;
+            const cny = (py - sy) / sh;
+            if (facingMode === "user") cnx = 1 - cnx;
+            const canvasX = cnx * canvas.width;
+            const canvasY = cny * canvas.height + box.size * (vw / sw) * canvas.width * sticker.yOffsetFactor;
+            const sizePx = box.size * (vw / sw) * canvas.width * sticker.scale;
+            ctx.save();
+            ctx.font = `${sizePx}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(sticker.emoji, canvasX, canvasY);
+            ctx.restore();
+          }
+        }
       }
       rafRef.current = requestAnimationFrame(draw);
     };
@@ -158,7 +323,7 @@ export function ShortsCamera() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [ready, filterKey, zoom, facingMode]);
+  }, [ready, filterKey, zoom, facingMode, backgroundKey, arSticker]);
 
   // ---------- elapsed timer while recording ----------
   useEffect(() => {
@@ -476,27 +641,103 @@ export function ShortsCamera() {
           </div>
         )}
 
+        {/* background strip */}
+        {showBackgroundPanel && !recording && (
+          <div className="no-scrollbar absolute inset-x-0 bottom-[168px] z-10 flex gap-2 overflow-x-auto px-4">
+            {BACKGROUND_OPTIONS.map((b) => (
+              <button
+                key={b.key}
+                onClick={() => {
+                  setBackgroundKey(b.key);
+                  if (b.key !== "none") setArSticker(null);
+                }}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11.5px] font-medium backdrop-blur ${
+                  backgroundKey === b.key ? "grad-purple-blue text-white" : "bg-black/40 text-white/80"
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* AR sticker strip */}
+        {showArPanel && !recording && (
+          <div className="no-scrollbar absolute inset-x-0 bottom-[168px] z-10 flex gap-2 overflow-x-auto px-4">
+            <button
+              onClick={() => setArSticker(null)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11.5px] font-medium backdrop-blur ${
+                arSticker === null ? "grad-purple-blue text-white" : "bg-black/40 text-white/80"
+              }`}
+            >
+              None
+            </button>
+            {AR_STICKERS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => {
+                  setArSticker(s.key);
+                  setBackgroundKey("none");
+                }}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11.5px] font-medium backdrop-blur ${
+                  arSticker === s.key ? "grad-purple-blue text-white" : "bg-black/40 text-white/80"
+                }`}
+              >
+                {s.emoji} {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {arLoading && (
+          <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-1.5 text-[11px] text-white backdrop-blur">
+            Loading effect…
+          </div>
+        )}
+
         {/* bottom controls */}
         <div className="absolute inset-x-0 bottom-0 z-10 safe-bottom">
           {!recording && (
-            <div className="flex items-center justify-center gap-6 pb-3">
+            <div className="no-scrollbar flex items-center justify-center gap-5 overflow-x-auto px-2 pb-3">
               <button
                 onClick={() => setShowFilters((v) => !v)}
-                className={`flex flex-col items-center gap-1 text-white ${showFilters ? "opacity-100" : "opacity-70"}`}
+                className={`flex shrink-0 flex-col items-center gap-1 text-white ${showFilters ? "opacity-100" : "opacity-70"}`}
               >
                 <Sparkles className="h-5 w-5" />
                 <span className="text-[10px]">Effects</span>
               </button>
               <button
+                onClick={() => {
+                  setShowBackgroundPanel((v) => !v);
+                  setShowArPanel(false);
+                }}
+                className={`flex shrink-0 flex-col items-center gap-1 text-white ${
+                  backgroundKey !== "none" ? "opacity-100" : "opacity-70"
+                }`}
+              >
+                <Wand2 className="h-5 w-5" />
+                <span className="text-[10px]">Background</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowArPanel((v) => !v);
+                  setShowBackgroundPanel(false);
+                }}
+                className={`flex shrink-0 flex-col items-center gap-1 text-white ${arSticker ? "opacity-100" : "opacity-70"}`}
+              >
+                <Glasses className="h-5 w-5" />
+                <span className="text-[10px]">AR</span>
+              </button>
+              <button
                 onClick={() => setTimerSec((t) => TIMER_OPTIONS[(TIMER_OPTIONS.indexOf(t) + 1) % TIMER_OPTIONS.length])}
-                className="flex flex-col items-center gap-1 text-white opacity-70"
+                className="flex shrink-0 flex-col items-center gap-1 text-white opacity-70"
               >
                 <TimerIcon className="h-5 w-5" />
                 <span className="text-[10px]">{timerSec === 0 ? "Timer" : `${timerSec}s`}</span>
               </button>
               <button
                 onClick={() => setMode((m) => (m === "video" ? "photo" : "video"))}
-                className="flex flex-col items-center gap-1 text-white opacity-70"
+                className="flex shrink-0 flex-col items-center gap-1 text-white opacity-70"
               >
                 {mode === "video" ? <ImageIcon className="h-5 w-5" /> : <VideoIcon className="h-5 w-5" />}
                 <span className="text-[10px]">{mode === "video" ? "Photo" : "Video"}</span>
@@ -508,7 +749,7 @@ export function ShortsCamera() {
                 step={0.1}
                 value={zoom}
                 onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-16 accent-fuchsia-500"
+                className="w-16 shrink-0 accent-fuchsia-500"
               />
             </div>
           )}
