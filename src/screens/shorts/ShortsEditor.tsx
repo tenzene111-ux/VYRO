@@ -35,6 +35,7 @@ import {
 } from "../../lib/shorts/types";
 import { filterPresets, applyPreset, filterToCss } from "../../lib/shorts/filters";
 import { detectSilenceTrim, pickBestCoverFrame, autoColorForClip } from "../../lib/shorts/smart";
+import { planVideoEdit } from "../../lib/ai";
 
 type Panel = "none" | "clip" | "text" | "captions" | "audio" | "smart";
 
@@ -470,6 +471,70 @@ export function ShortsEditor() {
     });
   };
 
+  const applyFilterToAllClips = (key: string) => {
+    mutate((p) => ({ ...p, clips: p.clips.map((c) => ({ ...c, filter: applyPreset(key) })) }));
+  };
+
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAskAi = async () => {
+    if (!project || !aiInstruction.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError(null);
+    setAiExplanation(null);
+    try {
+      const plan = await planVideoEdit(aiInstruction.trim(), {
+        clipCount: project.clips.length,
+        durationSec: totalDuration(project),
+        hasMusic: !!project.audioTracks.find((a) => a.kind === "music"),
+        captionsEnabled: project.captionsEnabled,
+      });
+      setAiExplanation(plan.explanation);
+      for (const action of plan.actions) {
+        switch (action.type) {
+          case "trim_silence":
+            await handleTrimSilence();
+            break;
+          case "auto_color":
+            await handleAutoColor();
+            break;
+          case "auto_cover":
+            await handleAutoCover();
+            break;
+          case "shorten_15":
+            handleShorten15();
+            break;
+          case "cinematic_filter":
+            applyFilterToAllClips("cinematic");
+            break;
+          case "warm_filter":
+            applyFilterToAllClips("warm");
+            break;
+          case "cool_filter":
+            applyFilterToAllClips("cool");
+            break;
+          case "bw_filter":
+            applyFilterToAllClips("bw");
+            break;
+          case "vintage_filter":
+            applyFilterToAllClips("vintage");
+            break;
+          case "enable_captions":
+            mutate((p) => ({ ...p, captionsEnabled: true }));
+            break;
+        }
+      }
+      setAiInstruction("");
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI Assist couldn't process that.");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   const addMediaMore = () => navigate(`/create/reel/upload?project=${id}`);
 
   if (project === undefined) {
@@ -687,6 +752,12 @@ export function ShortsEditor() {
           onAutoColor={handleAutoColor}
           onShorten={handleShorten15}
           onClose={() => setPanel("none")}
+          aiInstruction={aiInstruction}
+          onAiInstructionChange={setAiInstruction}
+          aiBusy={aiBusy}
+          aiExplanation={aiExplanation}
+          aiError={aiError}
+          onAskAi={handleAskAi}
         />
       )}
     </div>
@@ -1215,6 +1286,12 @@ function SmartPanel({
   onAutoColor,
   onShorten,
   onClose,
+  aiInstruction,
+  onAiInstructionChange,
+  aiBusy,
+  aiExplanation,
+  aiError,
+  onAskAi,
 }: {
   busy: string | null;
   onTrimSilence: () => void;
@@ -1222,12 +1299,37 @@ function SmartPanel({
   onAutoColor: () => void;
   onShorten: () => void;
   onClose: () => void;
+  aiInstruction: string;
+  onAiInstructionChange: (v: string) => void;
+  aiBusy: boolean;
+  aiExplanation: string | null;
+  aiError: string | null;
+  onAskAi: () => void;
 }) {
   return (
     <Sheet title="Smart Tools" onClose={onClose}>
-      <p className="mb-3 text-[11.5px] text-white/50">
-        Real analysis run on your clips right on this device — no cloud AI, no account needed.
-      </p>
+      <p className="mb-2 text-[11.5px] font-medium text-white/60">AI Assist</p>
+      <div className="mb-2 flex items-center gap-2">
+        <input
+          value={aiInstruction}
+          onChange={(e) => onAiInstructionChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onAskAi()}
+          placeholder={'e.g. "make this cinematic" or "add captions"'}
+          className="flex-1 rounded-full bg-white/10 px-3.5 py-2.5 text-[12.5px] text-white outline-none placeholder:text-white/40"
+        />
+        <button
+          onClick={onAskAi}
+          disabled={aiBusy || !aiInstruction.trim()}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-primary text-white disabled:opacity-50"
+        >
+          {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+        </button>
+      </div>
+      {aiError && <p className="mb-3 text-[11.5px] text-rose-400">{aiError}</p>}
+      {aiExplanation && !aiError && <p className="mb-3 text-[11.5px] text-emerald-300">✓ {aiExplanation}</p>}
+
+      <p className="mb-2 mt-4 text-[11.5px] font-medium text-white/60">On-Device Tools</p>
+      <p className="mb-3 text-[11.5px] text-white/50">Real analysis run on your clips right on this device — no cloud, no account.</p>
       <div className="space-y-2">
         <SmartAction label="Trim Silence" description="Cuts dead air from the start/end of each clip using its audio." busy={busy === "silence"} onClick={onTrimSilence} />
         <SmartAction label="Auto Cover" description="Picks the sharpest, best-lit frame as your cover." busy={busy === "cover"} onClick={onAutoCover} />

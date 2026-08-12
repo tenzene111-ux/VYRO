@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, ImagePlus, Globe, Users, Lock, MessageSquare, Check, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Loader2, ImagePlus, Globe, Users, Lock, MessageSquare, Check, AlertTriangle, Sparkles } from "lucide-react";
 import { loadProject, saveProject, deleteProject } from "../../lib/shorts/db";
 import { totalDuration, type ShortProject, type Visibility } from "../../lib/shorts/types";
 import { formatDuration } from "../../lib/shorts/media";
 import { renderProject, extractCoverFrame } from "../../lib/shorts/render";
 import { uploadImage, uploadVideoBlob } from "../../lib/storage";
 import { createVideoPost } from "../../lib/api";
+import { suggestCaptions, type CaptionSuggestions } from "../../lib/ai";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar } from "../../components/Avatar";
 
@@ -31,6 +32,12 @@ export function ShortsPublish() {
   const [stage, setStage] = useState<Stage>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const [showCaptionAi, setShowCaptionAi] = useState(false);
+  const [captionIntent, setCaptionIntent] = useState("");
+  const [captionSuggesting, setCaptionSuggesting] = useState(false);
+  const [captionSuggestions, setCaptionSuggestions] = useState<CaptionSuggestions | null>(null);
+  const [captionAiError, setCaptionAiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -101,6 +108,29 @@ export function ShortsPublish() {
       setError(e instanceof Error ? e.message : "Something went wrong while publishing.");
       setStage("failed");
     }
+  };
+
+  const handleSuggestCaptions = async () => {
+    if (captionSuggesting) return;
+    setCaptionSuggesting(true);
+    setCaptionAiError(null);
+    setCaptionSuggestions(null);
+    try {
+      const intent = captionIntent.trim() || project?.caption.trim() || "a short video";
+      const result = await suggestCaptions(intent);
+      setCaptionSuggestions(result);
+    } catch (e) {
+      setCaptionAiError(e instanceof Error ? e.message : "Couldn't get suggestions.");
+    } finally {
+      setCaptionSuggesting(false);
+    }
+  };
+
+  const applyCaptionSuggestion = (caption: string, hashtags: string[]) => {
+    const tagLine = hashtags.length > 0 ? `\n\n${hashtags.map((h) => `#${h}`).join(" ")}` : "";
+    patch((p) => ({ ...p, caption: caption + tagLine }));
+    setShowCaptionAi(false);
+    setCaptionSuggestions(null);
   };
 
   const handleSaveDraft = async () => {
@@ -184,16 +214,63 @@ export function ShortsPublish() {
         </div>
       </div>
 
-      <div className="mb-4 flex items-start gap-2.5">
+      <div className="mb-2 flex items-start gap-2.5">
         <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={32} />
-        <textarea
-          value={project.caption}
-          onChange={(e) => patch((p) => ({ ...p, caption: e.target.value }))}
-          placeholder="Write a caption…"
-          rows={3}
-          className="flex-1 resize-none rounded-2xl glass-card px-3.5 py-2.5 text-[13px] text-ink outline-none placeholder:text-mist/60"
-        />
+        <div className="relative flex-1">
+          <textarea
+            value={project.caption}
+            onChange={(e) => patch((p) => ({ ...p, caption: e.target.value }))}
+            placeholder="Write a caption…"
+            rows={3}
+            className="w-full resize-none rounded-2xl glass-card px-3.5 py-2.5 pr-10 text-[13px] text-ink outline-none placeholder:text-mist/60"
+          />
+          <button
+            onClick={() => setShowCaptionAi((v) => !v)}
+            className={`absolute right-2.5 top-2.5 rounded-full p-1.5 ${showCaptionAi ? "grad-primary text-white" : "chip text-violet-300"}`}
+            title="AI caption suggestions"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
+
+      {showCaptionAi && (
+        <div className="mb-4 ml-[42px] rounded-2xl glass-card p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <input
+              value={captionIntent}
+              onChange={(e) => setCaptionIntent(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSuggestCaptions()}
+              placeholder="What's this video about?"
+              className="flex-1 rounded-full chip px-3.5 py-2 text-[12.5px] text-ink outline-none placeholder:text-mist/60"
+            />
+            <button
+              onClick={handleSuggestCaptions}
+              disabled={captionSuggesting}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full grad-primary text-white disabled:opacity-50"
+            >
+              {captionSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            </button>
+          </div>
+          {captionAiError && <p className="text-[11.5px] text-rose-400">{captionAiError}</p>}
+          {captionSuggestions && (
+            <div className="space-y-1.5">
+              {captionSuggestions.captions.map((c, i) => (
+                <button
+                  key={i}
+                  onClick={() => applyCaptionSuggestion(c, captionSuggestions.hashtags)}
+                  className="block w-full rounded-xl bg-white/5 px-3 py-2 text-left text-[12px] text-ink"
+                >
+                  {c}
+                </button>
+              ))}
+              {captionSuggestions.hashtags.length > 0 && (
+                <p className="px-1 text-[11px] text-mist">{captionSuggestions.hashtags.map((h) => `#${h}`).join(" ")}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <p className="mb-2 text-[12px] font-medium text-mist">Who can watch</p>
       <div className="mb-4 flex gap-2">
