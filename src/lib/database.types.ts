@@ -182,21 +182,27 @@ export type Database = {
           id: string;
           conversation_id: string;
           sender_id: string;
-          text: string;
+          text: string | null;
+          audio_url: string | null;
+          audio_duration_seconds: number | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           conversation_id: string;
           sender_id: string;
-          text: string;
+          text?: string | null;
+          audio_url?: string | null;
+          audio_duration_seconds?: number | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           conversation_id?: string;
           sender_id?: string;
-          text?: string;
+          text?: string | null;
+          audio_url?: string | null;
+          audio_duration_seconds?: number | null;
           created_at?: string;
         };
         Relationships: [];

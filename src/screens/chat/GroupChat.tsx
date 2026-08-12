@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, MoreVertical, Send, Loader2, LogOut } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { VoiceRecorder } from "../../components/VoiceRecorder";
+import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
-import { getGroup, leaveGroup, listMessages, sendMessage, subscribeToMessages, type ChatMessage, type Group } from "../../lib/api";
+import { getGroup, leaveGroup, listMessages, sendMessage, sendVoiceMessage, subscribeToMessages, type ChatMessage, type Group } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 
 export function GroupChat() {
@@ -15,6 +17,7 @@ export function GroupChat() {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [authors, setAuthors] = useState<Map<string, Profile>>(new Map());
   const [input, setInput] = useState("");
+  const [voiceRecording, setVoiceRecording] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +64,11 @@ export function GroupChat() {
     const text = input.trim();
     setInput("");
     await sendMessage(group.conversation_id, user.id, text);
+  };
+
+  const handleSendVoice = async (audioUrl: string, durationSeconds: number) => {
+    if (!group?.conversation_id || !user) return;
+    await sendVoiceMessage(group.conversation_id, user.id, audioUrl, durationSeconds);
   };
 
   const handleLeave = async () => {
@@ -113,7 +121,11 @@ export function GroupChat() {
                 return (
                   <div key={m.id} className="flex justify-end">
                     <div className="max-w-[75%] rounded-3xl grad-purple-blue px-4 py-2.5 text-[13.5px] leading-relaxed text-white">
-                      {m.text}
+                      {m.audio_url ? (
+                        <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine />
+                      ) : (
+                        m.text
+                      )}
                     </div>
                   </div>
                 );
@@ -123,7 +135,13 @@ export function GroupChat() {
                   <Avatar name={author?.name ?? "?"} avatarUrl={author?.avatar_url} size={32} />
                   <div className="max-w-[75%]">
                     <p className="mb-0.5 text-[11px] font-medium text-violet-300">{author?.name ?? "…"}</p>
-                    <div className="rounded-2xl chip px-3.5 py-2.5 text-[13.5px] text-ink">{m.text}</div>
+                    <div className="rounded-2xl chip px-3.5 py-2.5 text-[13.5px] text-ink">
+                      {m.audio_url ? (
+                        <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine={false} />
+                      ) : (
+                        m.text
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -134,22 +152,27 @@ export function GroupChat() {
       </div>
 
       <div className="flex items-center gap-2 border-t border-white/5 px-3 py-3 safe-bottom">
-        <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Message the group..."
-            className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
-          />
-        </div>
-        <button
-          onClick={send}
-          disabled={!input.trim()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-purple-blue text-white disabled:opacity-40"
-        >
-          <Send className="h-4.5 w-4.5" />
-        </button>
+        {!voiceRecording && (
+          <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              placeholder="Message the group..."
+              className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
+            />
+          </div>
+        )}
+        {input.trim() ? (
+          <button
+            onClick={send}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-purple-blue text-white"
+          >
+            <Send className="h-4.5 w-4.5" />
+          </button>
+        ) : (
+          <VoiceRecorder onSend={handleSendVoice} onRecordingChange={setVoiceRecording} />
+        )}
       </div>
     </div>
   );

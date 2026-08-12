@@ -9,6 +9,10 @@ export async function uploadVideoBlob(userId: string, blob: Blob, ext = "webm"):
   return uploadToMedia(userId, blob, ext);
 }
 
+export async function uploadAudioBlob(userId: string, blob: Blob, ext = "webm"): Promise<string> {
+  return uploadToMedia(userId, blob, ext);
+}
+
 async function uploadToMedia(userId: string, file: Blob, ext: string): Promise<string> {
   const path = `${userId}/${crypto.randomUUID()}.${ext}`;
 

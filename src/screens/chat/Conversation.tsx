@@ -2,9 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Phone, Video, Send, Loader2 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { VoiceRecorder } from "../../components/VoiceRecorder";
+import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
-import { getConversationOther, listMessages, sendMessage, subscribeToMessages, type ChatMessage } from "../../lib/api";
+import { getConversationOther, listMessages, sendMessage, sendVoiceMessage, subscribeToMessages, type ChatMessage } from "../../lib/api";
 
 export function Conversation() {
   const { id } = useParams<{ id: string }>();
@@ -14,6 +16,7 @@ export function Conversation() {
   const [other, setOther] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [input, setInput] = useState("");
+  const [voiceRecording, setVoiceRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,6 +38,11 @@ export function Conversation() {
     const text = input.trim();
     setInput("");
     await sendMessage(id, user.id, text);
+  };
+
+  const handleSendVoice = async (audioUrl: string, durationSeconds: number) => {
+    if (!id || !user) return;
+    await sendVoiceMessage(id, user.id, audioUrl, durationSeconds);
   };
 
   const handleCall = async (kind: "voice" | "video") => {
@@ -84,22 +92,27 @@ export function Conversation() {
       </div>
 
       <div className="flex items-center gap-2 border-t border-white/5 px-3 py-3 safe-bottom">
-        <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Type a message..."
-            className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
-          />
-        </div>
-        <button
-          onClick={send}
-          disabled={!input.trim()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-primary text-white transition-transform active:scale-95 disabled:opacity-40"
-        >
-          <Send className="h-4.5 w-4.5" />
-        </button>
+        {!voiceRecording && (
+          <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              placeholder="Type a message..."
+              className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
+            />
+          </div>
+        )}
+        {input.trim() ? (
+          <button
+            onClick={send}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-primary text-white transition-transform active:scale-95"
+          >
+            <Send className="h-4.5 w-4.5" />
+          </button>
+        ) : (
+          <VoiceRecorder onSend={handleSendVoice} onRecordingChange={setVoiceRecording} />
+        )}
       </div>
     </div>
   );
@@ -113,7 +126,11 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
           mine ? "grad-purple-blue text-white" : "chip text-ink"
         }`}
       >
-        {message.text}
+        {message.audio_url ? (
+          <VoiceMessageBubble url={message.audio_url} duration={message.audio_duration_seconds ?? 0} mine={mine} />
+        ) : (
+          message.text
+        )}
         <div className={`mt-1 text-right text-[10px] ${mine ? "text-white/70" : "text-mist"}`}>
           {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </div>

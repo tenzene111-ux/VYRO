@@ -367,14 +367,14 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, text, created_at")
+    .select("conversation_id, text, audio_url, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
-  const lastByConversation = new Map<string, { text: string; created_at: string }>();
+  const lastByConversation = new Map<string, { text: string | null; audio_url: string | null; created_at: string }>();
   for (const m of lastMessages ?? []) {
     if (!lastByConversation.has(m.conversation_id)) {
-      lastByConversation.set(m.conversation_id, { text: m.text, created_at: m.created_at });
+      lastByConversation.set(m.conversation_id, { text: m.text, audio_url: m.audio_url, created_at: m.created_at });
     }
   }
 
@@ -387,7 +387,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
       return {
         id,
         other,
-        last_message: last?.text ?? null,
+        last_message: last ? (last.text || (last.audio_url ? "🎤 Voice message" : "")) : null,
         last_message_at: last?.created_at ?? null,
       };
     })
@@ -433,7 +433,9 @@ export type ChatMessage = {
   id: string;
   conversation_id: string;
   sender_id: string;
-  text: string;
+  text: string | null;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
   created_at: string;
 };
 
@@ -449,6 +451,18 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
 
 export async function sendMessage(conversationId: string, senderId: string, text: string) {
   const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: senderId, text });
+  if (error) throw error;
+}
+
+export async function sendVoiceMessage(
+  conversationId: string,
+  senderId: string,
+  audioUrl: string,
+  durationSeconds: number
+) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, audio_url: audioUrl, audio_duration_seconds: durationSeconds });
   if (error) throw error;
 }
 

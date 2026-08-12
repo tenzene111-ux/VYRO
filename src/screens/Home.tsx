@@ -5,17 +5,21 @@ import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
 import { useAuth, type Profile } from "../context/AuthContext";
-import { listFeedPosts, listActiveStories, listSeenStoryIds, type FeedPost, type StoryWithAuthor } from "../lib/api";
+import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
+import { rankForYou, filterFollowing } from "../lib/ranking";
 
 export function Home() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const [posts, setPosts] = useState<FeedPost[] | null>(null);
+  const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<"forYou" | "following">("forYou");
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
 
   useEffect(() => {
     if (!user) return;
-    listFeedPosts(user.id).then(setPosts).catch(() => setPosts([]));
+    listFeedPosts(user.id).then(setAllPosts).catch(() => setAllPosts([]));
+    listFollowing(user.id).then(setFollowingIds).catch(() => setFollowingIds(new Set()));
     Promise.all([listActiveStories(), listSeenStoryIds(user.id)]).then(([stories, seenIds]) => {
       const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean }>();
       for (const s of stories) {
@@ -27,6 +31,13 @@ export function Home() {
       setStoryAuthors([...byAuthor.values()]);
     });
   }, [user]);
+
+  const posts =
+    allPosts === null
+      ? null
+      : tab === "forYou"
+      ? rankForYou(allPosts, followingIds, user?.id ?? "")
+      : filterFollowing(allPosts, followingIds, user?.id ?? "");
 
   return (
     <div className="px-4">
@@ -78,14 +89,37 @@ export function Home() {
         </span>
       </button>
 
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setTab("forYou")}
+          className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors ${
+            tab === "forYou" ? "grad-primary text-white" : "chip text-mist"
+          }`}
+        >
+          For You
+        </button>
+        <button
+          onClick={() => setTab("following")}
+          className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors ${
+            tab === "following" ? "grad-primary text-white" : "chip text-mist"
+          }`}
+        >
+          Following
+        </button>
+      </div>
+
       {posts === null ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-mist" />
         </div>
       ) : posts.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="font-display text-sm font-semibold text-ink">Your feed is empty</p>
-          <p className="max-w-[240px] text-[12.5px] text-mist">Be the first to share something with VYRO.</p>
+          <p className="font-display text-sm font-semibold text-ink">
+            {tab === "following" ? "Follow people to see their posts here" : "Your feed is empty"}
+          </p>
+          <p className="max-w-[240px] text-[12.5px] text-mist">
+            {tab === "following" ? "Explore to find creators worth following." : "Be the first to share something with VYRO."}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-4 pb-4">
