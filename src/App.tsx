@@ -26,6 +26,7 @@ import { Wallet } from "./screens/Wallet";
 import { CreatorStudio } from "./screens/CreatorStudio";
 import { StoryViewer } from "./screens/StoryViewer";
 import { Live } from "./screens/Live";
+import { VideoFeed } from "./screens/VideoFeed";
 import { ShortsStudio } from "./screens/shorts/ShortsStudio";
 import { ShortsCamera } from "./screens/shorts/ShortsCamera";
 import { ShortsUpload } from "./screens/shorts/ShortsUpload";
@@ -103,6 +104,7 @@ export default function App() {
                 <Route path="/create/reel/publish/:id" element={<ShortsPublish />} />
                 <Route path="/live/:id" element={<LiveRoom />} />
                 <Route path="/live/:id/replay" element={<LiveReplay />} />
+                <Route path="/watch/:postId" element={<VideoFeed />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

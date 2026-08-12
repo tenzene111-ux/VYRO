@@ -153,6 +153,28 @@ export async function listTopPosts(currentUserId: string, limit = 5): Promise<Fe
   return [...all].sort((a, b) => b.like_count - a.like_count).slice(0, limit);
 }
 
+export async function listVideoPosts(currentUserId: string): Promise<FeedPost[]> {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, created_at, author_id")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (!posts || posts.length === 0) return [];
+
+  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const postIds = posts.map((p) => p.id);
+
+  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIds),
+    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_comments").select("post_id").in("post_id", postIds),
+  ]);
+
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId);
+}
+
 export async function searchPeopleAndPosts(
   currentUserId: string,
   query: string

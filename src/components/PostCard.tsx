@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Volume2, VolumeX, Play } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../context/AuthContext";
 import { addComment, listComments, toggleLike, type Comment, type FeedPost } from "../lib/api";
@@ -15,9 +15,6 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentText, setCommentText] = useState("");
   const [posting, setPosting] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoPlaying, setVideoPlaying] = useState(false);
-  const [videoMuted, setVideoMuted] = useState(true);
 
   const handleLike = async () => {
     if (!user) return;
@@ -84,41 +81,25 @@ export function PostCard({ post }: { post: FeedPost }) {
       {post.text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>}
 
       {post.video_url && (
-        <div className="relative mx-4 mt-3 overflow-hidden rounded-2xl bg-black">
-          <video
-            ref={videoRef}
-            src={post.video_url}
-            poster={post.cover_url ?? undefined}
-            muted={videoMuted}
-            loop
-            playsInline
-            onClick={() => {
-              const v = videoRef.current;
-              if (!v) return;
-              if (v.paused) {
-                v.play();
-                setVideoPlaying(true);
-              } else {
-                v.pause();
-                setVideoPlaying(false);
-              }
-            }}
-            className="max-h-[600px] w-full"
-          />
-          {!videoPlaying && (
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-              <span className="rounded-full bg-black/40 p-3.5 backdrop-blur">
-                <Play className="h-6 w-6 text-white" />
-              </span>
+        <button
+          onClick={() => navigate(`/watch/${post.id}`)}
+          className="relative mx-4 mt-3 flex aspect-[4/5] w-[calc(100%-2rem)] items-center justify-center overflow-hidden rounded-2xl bg-black"
+        >
+          {post.cover_url ? (
+            <img src={post.cover_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <video src={post.video_url} className="absolute inset-0 h-full w-full object-cover" muted />
+          )}
+          <span className="absolute inset-0 bg-black/15" />
+          <span className="relative rounded-full bg-black/45 p-3.5 backdrop-blur">
+            <Play className="h-6 w-6 text-white" />
+          </span>
+          {post.video_duration_seconds != null && (
+            <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/45 px-2 py-0.5 text-[10.5px] font-medium text-white backdrop-blur">
+              {formatVideoDuration(post.video_duration_seconds)}
             </span>
           )}
-          <button
-            onClick={() => setVideoMuted((m) => !m)}
-            className="absolute bottom-2.5 right-2.5 rounded-full bg-black/45 p-2 text-white backdrop-blur"
-          >
-            {videoMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-          </button>
-        </div>
+        </button>
       )}
 
       {!post.video_url && post.image_url && (
@@ -203,6 +184,11 @@ export function PostCard({ post }: { post: FeedPost }) {
       )}
     </article>
   );
+}
+
+function formatVideoDuration(sec: number) {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function formatCount(n: number) {
