@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { registerServiceWorker } from './lib/push'
+import { initTheme } from './lib/theme'
 
+initTheme()
 registerServiceWorker().catch(() => {})
 
 createRoot(document.getElementById('root')!).render(

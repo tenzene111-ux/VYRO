@@ -21,6 +21,111 @@
   --color-fog: #6a6a82;
 }
 
+/* ---------- theme-able surface tokens (dark = default) ---------- */
+:root {
+  --glass-tint-1: rgba(255, 255, 255, 0.055);
+  --glass-tint-2: rgba(255, 255, 255, 0.02);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  --glass-strong-1: rgba(20, 20, 38, 0.92);
+  --glass-strong-2: rgba(10, 10, 22, 0.88);
+  --glass-strong-border: rgba(255, 255, 255, 0.1);
+
+  --glass-card-1: rgba(255, 255, 255, 0.05);
+  --glass-card-2: rgba(255, 255, 255, 0.015);
+  --glass-card-border: rgba(255, 255, 255, 0.07);
+  --glass-card-inset: rgba(255, 255, 255, 0.05);
+  --glass-card-outer: rgba(0, 0, 0, 0.6);
+
+  --chip-bg: rgba(255, 255, 255, 0.05);
+  --chip-border: rgba(255, 255, 255, 0.08);
+
+  --ring-story-seen: rgba(255, 255, 255, 0.14);
+
+  --radial-1: rgba(139, 92, 246, 0.22);
+  --radial-2: rgba(34, 211, 238, 0.14);
+  --radial-3: rgba(217, 70, 239, 0.14);
+
+  --shimmer-a: rgba(255, 255, 255, 0.4);
+  --shimmer-b: rgba(255, 255, 255, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-void: #f5f6fb;
+    --color-void-2: #eceef8;
+    --color-abyss: #e4e6f4;
+    --color-surface: #ffffff;
+    --color-surface-2: #f8f9fd;
+    --color-ink: #14152b;
+    --color-mist: #5c5c78;
+    --color-fog: #8a8aa3;
+
+    --glass-tint-1: rgba(20, 20, 45, 0.05);
+    --glass-tint-2: rgba(20, 20, 45, 0.018);
+    --glass-border: rgba(20, 20, 45, 0.09);
+
+    --glass-strong-1: rgba(255, 255, 255, 0.94);
+    --glass-strong-2: rgba(246, 247, 253, 0.9);
+    --glass-strong-border: rgba(20, 20, 45, 0.08);
+
+    --glass-card-1: rgba(20, 20, 45, 0.04);
+    --glass-card-2: rgba(20, 20, 45, 0.012);
+    --glass-card-border: rgba(20, 20, 45, 0.08);
+    --glass-card-inset: rgba(255, 255, 255, 0.7);
+    --glass-card-outer: rgba(70, 70, 110, 0.16);
+
+    --chip-bg: rgba(20, 20, 45, 0.045);
+    --chip-border: rgba(20, 20, 45, 0.09);
+
+    --ring-story-seen: rgba(20, 20, 45, 0.12);
+
+    --radial-1: rgba(139, 92, 246, 0.14);
+    --radial-2: rgba(34, 211, 238, 0.1);
+    --radial-3: rgba(217, 70, 239, 0.1);
+
+    --shimmer-a: rgba(20, 20, 45, 0.35);
+    --shimmer-b: rgba(20, 20, 45, 0.9);
+  }
+}
+
+:root[data-theme="light"] {
+  --color-void: #f5f6fb;
+  --color-void-2: #eceef8;
+  --color-abyss: #e4e6f4;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8f9fd;
+  --color-ink: #14152b;
+  --color-mist: #5c5c78;
+  --color-fog: #8a8aa3;
+
+  --glass-tint-1: rgba(20, 20, 45, 0.05);
+  --glass-tint-2: rgba(20, 20, 45, 0.018);
+  --glass-border: rgba(20, 20, 45, 0.09);
+
+  --glass-strong-1: rgba(255, 255, 255, 0.94);
+  --glass-strong-2: rgba(246, 247, 253, 0.9);
+  --glass-strong-border: rgba(20, 20, 45, 0.08);
+
+  --glass-card-1: rgba(20, 20, 45, 0.04);
+  --glass-card-2: rgba(20, 20, 45, 0.012);
+  --glass-card-border: rgba(20, 20, 45, 0.08);
+  --glass-card-inset: rgba(255, 255, 255, 0.7);
+  --glass-card-outer: rgba(70, 70, 110, 0.16);
+
+  --chip-bg: rgba(20, 20, 45, 0.045);
+  --chip-border: rgba(20, 20, 45, 0.09);
+
+  --ring-story-seen: rgba(20, 20, 45, 0.12);
+
+  --radial-1: rgba(139, 92, 246, 0.14);
+  --radial-2: rgba(34, 211, 238, 0.1);
+  --radial-3: rgba(217, 70, 239, 0.1);
+
+  --shimmer-a: rgba(20, 20, 45, 0.35);
+  --shimmer-b: rgba(20, 20, 45, 0.9);
+}
+
 @keyframes glow-pulse {
   0%, 100% { opacity: 0.55; filter: blur(18px); }
   50% { opacity: 0.95; filter: blur(26px); }
@@ -112,30 +217,30 @@ body {
 
 .bg-vyro-radial {
   background:
-    radial-gradient(120% 60% at 15% -10%, rgba(139, 92, 246, 0.22), transparent 60%),
-    radial-gradient(90% 50% at 100% 0%, rgba(34, 211, 238, 0.14), transparent 55%),
-    radial-gradient(100% 60% at 50% 120%, rgba(217, 70, 239, 0.14), transparent 60%),
+    radial-gradient(120% 60% at 15% -10%, var(--radial-1), transparent 60%),
+    radial-gradient(90% 50% at 100% 0%, var(--radial-2), transparent 55%),
+    radial-gradient(100% 60% at 50% 120%, var(--radial-3), transparent 60%),
     var(--color-void);
 }
 
 .glass {
-  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, var(--glass-tint-1), var(--glass-tint-2));
+  border: 1px solid var(--glass-border);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
 
 .glass-strong {
-  background: linear-gradient(180deg, rgba(20,20,38,0.92), rgba(10,10,22,0.88));
-  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, var(--glass-strong-1), var(--glass-strong-2));
+  border: 1px solid var(--glass-strong-border);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
 
 .glass-card {
-  background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
-  border: 1px solid rgba(255,255,255,0.07);
-  box-shadow: 0 1px 0 0 rgba(255,255,255,0.05) inset, 0 20px 40px -20px rgba(0,0,0,0.6);
+  background: linear-gradient(165deg, var(--glass-card-1), var(--glass-card-2));
+  border: 1px solid var(--glass-card-border);
+  box-shadow: 0 1px 0 0 var(--glass-card-inset) inset, 0 20px 40px -20px var(--glass-card-outer);
 }
 
 .text-gradient {
@@ -158,7 +263,7 @@ body {
 }
 
 .ring-story-seen {
-  background: rgba(255,255,255,0.14);
+  background: var(--ring-story-seen);
 }
 
 .glow-violet {
@@ -172,12 +277,12 @@ body {
 }
 
 .chip {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
 }
 
 .shimmer-text {
-  background: linear-gradient(90deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.4) 100%);
+  background: linear-gradient(90deg, var(--shimmer-a) 0%, var(--shimmer-b) 50%, var(--shimmer-a) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;

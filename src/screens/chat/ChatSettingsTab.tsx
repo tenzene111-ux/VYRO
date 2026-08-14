@@ -1,18 +1,24 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  User, Lock, Bell, Shield, Database, HelpCircle, ChevronRight, Moon, Wallet, Sparkles,
+  User, Lock, Bell, Shield, Database, HelpCircle, ChevronRight, Moon, Sun, Monitor, Wallet, Sparkles,
   LogOut, EyeOff, Fingerprint,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../context/AuthContext";
+import { getStoredTheme, setTheme, type ThemeMode } from "../../lib/theme";
 
 export function ChatSettingsTab() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const [darkMode, setDarkMode] = useState(true);
+  const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme());
   const [readReceipts, setReadReceipts] = useState(true);
   const [biometric, setBiometric] = useState(true);
+
+  const handleThemeChange = (mode: ThemeMode) => {
+    setThemeState(mode);
+    setTheme(mode);
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -40,7 +46,7 @@ export function ChatSettingsTab() {
       </SettingsGroup>
 
       <SettingsGroup title="Preferences">
-        <ToggleRow icon={Moon} label="Dark mode" value={darkMode} onChange={setDarkMode} />
+        <ThemeRow value={theme} onChange={handleThemeChange} />
         <Row icon={Bell} label="Notifications" onClick={() => {}} />
       </SettingsGroup>
 
@@ -82,6 +88,34 @@ function Row({ icon: Icon, label, onClick }: { icon: typeof User; label: string;
       <span className="flex-1 text-[13.5px] text-ink">{label}</span>
       <ChevronRight className="h-4 w-4 text-mist" />
     </button>
+  );
+}
+
+function ThemeRow({ value, onChange }: { value: ThemeMode; onChange: (mode: ThemeMode) => void }) {
+  const options: { mode: ThemeMode; icon: typeof Moon; label: string }[] = [
+    { mode: "dark", icon: Moon, label: "Dark" },
+    { mode: "light", icon: Sun, label: "Light" },
+    { mode: "system", icon: Monitor, label: "System" },
+  ];
+  return (
+    <div className="flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 last:border-b-0">
+      <Moon className="h-4.5 w-4.5 text-violet-300" />
+      <span className="flex-1 text-[13.5px] text-ink">Appearance</span>
+      <div className="flex gap-1 rounded-full chip p-0.5">
+        {options.map((opt) => (
+          <button
+            key={opt.mode}
+            onClick={() => onChange(opt.mode)}
+            title={opt.label}
+            className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+              value === opt.mode ? "grad-purple-blue text-white" : "text-mist"
+            }`}
+          >
+            <opt.icon className="h-3.5 w-3.5" />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
