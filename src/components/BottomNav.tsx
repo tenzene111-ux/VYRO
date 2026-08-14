@@ -16,25 +16,23 @@ export function BottomNav() {
   const { setCreateOpen } = useUI();
 
   return (
-    <nav className="pointer-events-none sticky inset-x-0 bottom-0 z-40 flex justify-center safe-bottom">
-      <div className="pointer-events-auto mx-auto mb-3 flex w-[calc(100%-24px)] max-w-[420px] items-center justify-between rounded-[28px] px-2 py-2 glass-strong shadow-[0_20px_50px_-15px_rgba(0,0,0,0.8)]">
-        {items.map((item) => (
-          <NavItem key={item.to} {...item} />
-        ))}
+    <nav className="sticky inset-x-0 bottom-0 z-40 flex items-center justify-between border-t border-white/8 bg-surface px-2 py-2 safe-bottom">
+      {items.map((item) => (
+        <NavItem key={item.to} {...item} />
+      ))}
 
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="relative -mt-8 flex h-14 w-14 shrink-0 items-center justify-center rounded-full grad-primary glow-violet animate-float active:scale-95 transition-transform"
-          aria-label="Create"
-        >
-          <span className="absolute inset-0 rounded-full grad-primary blur-md opacity-60 animate-glow-pulse" />
-          <Plus className="relative h-6 w-6 text-white" strokeWidth={2.5} />
-        </button>
+      <button
+        onClick={() => setCreateOpen(true)}
+        className="relative -mt-8 flex h-14 w-14 shrink-0 items-center justify-center rounded-full grad-primary glow-violet animate-float active:scale-95 transition-transform"
+        aria-label="Create"
+      >
+        <span className="absolute inset-0 rounded-full grad-primary blur-md opacity-60 animate-glow-pulse" />
+        <Plus className="relative h-6 w-6 text-white" strokeWidth={2.5} />
+      </button>
 
-        {itemsRight.map((item) => (
-          <NavItem key={item.to} {...item} />
-        ))}
-      </div>
+      {itemsRight.map((item) => (
+        <NavItem key={item.to} {...item} />
+      ))}
     </nav>
   );
 }
