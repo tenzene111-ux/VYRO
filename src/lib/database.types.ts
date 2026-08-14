@@ -248,6 +248,7 @@ export type Database = {
           privacy: string;
           creator_id: string;
           conversation_id: string | null;
+          encrypted: boolean;
           created_at: string;
         };
         Insert: {
@@ -257,6 +258,7 @@ export type Database = {
           privacy?: string;
           creator_id: string;
           conversation_id?: string | null;
+          encrypted?: boolean;
           created_at?: string;
         };
         Update: {
@@ -266,6 +268,7 @@ export type Database = {
           privacy?: string;
           creator_id?: string;
           conversation_id?: string | null;
+          encrypted?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -288,6 +291,33 @@ export type Database = {
           user_id?: string;
           role?: string;
           joined_at?: string;
+        };
+        Relationships: [];
+      };
+      group_keys: {
+        Row: {
+          group_id: string;
+          member_id: string;
+          wrapped_key: string;
+          wrapped_iv: string;
+          wrapper_public_key_jwk: Json;
+          created_at: string;
+        };
+        Insert: {
+          group_id: string;
+          member_id: string;
+          wrapped_key: string;
+          wrapped_iv: string;
+          wrapper_public_key_jwk: Json;
+          created_at?: string;
+        };
+        Update: {
+          group_id?: string;
+          member_id?: string;
+          wrapped_key?: string;
+          wrapped_iv?: string;
+          wrapper_public_key_jwk?: Json;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -842,6 +872,10 @@ export type Database = {
         Returns: undefined;
       };
       leave_group: {
+        Args: { p_group_id: string };
+        Returns: undefined;
+      };
+      enable_group_encryption: {
         Args: { p_group_id: string };
         Returns: undefined;
       };

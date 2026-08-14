@@ -1,12 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
-import { getGroup, leaveGroup, listMessages, sendMessage, sendVoiceMessage, subscribeToMessages, type ChatMessage, type Group } from "../../lib/api";
+import {
+  getGroup,
+  leaveGroup,
+  listMessages,
+  sendMessage,
+  sendVoiceMessage,
+  sendEncryptedGroupMessage,
+  publishPublicKey,
+  listGroupMemberKeys,
+  listGroupKeyWraps,
+  insertGroupKeyWraps,
+  enableGroupEncryption,
+  subscribeToMessages,
+  type ChatMessage,
+  type Group,
+} from "../../lib/api";
+import { ensureKeyPair, wrapGroupKey, unwrapGroupKey, generateGroupKey, encryptText, decryptText } from "../../lib/crypto";
 import { supabase } from "../../lib/supabase";
 
 export function GroupChat() {
@@ -19,12 +35,60 @@ export function GroupChat() {
   const [input, setInput] = useState("");
   const [voiceRecording, setVoiceRecording] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [myPublicJwk, setMyPublicJwk] = useState<JsonWebKey | null>(null);
+  const [groupKey, setGroupKey] = useState<CryptoKey | null>(null);
+  const [enabling, setEnabling] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
     getGroup(id).then(setGroup);
   }, [id]);
+
+  useEffect(() => {
+    if (!user) return;
+    ensureKeyPair().then(({ publicJwk, isNew }) => {
+      setMyPublicJwk(publicJwk);
+      if (isNew) publishPublicKey(user.id, publicJwk).catch(() => {});
+    });
+  }, [user]);
+
+  // Unwraps this device's copy of the group key once it exists, then grants access
+  // (lazily, this device becomes the "existing holder") to any member who joined
+  // encryption after they were last wrapped for.
+  useEffect(() => {
+    if (!group?.encrypted || !group.id || !user || !myPublicJwk) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { keyPair } = await ensureKeyPair();
+        const wraps = await listGroupKeyWraps(group.id);
+        const myWrap = wraps.find((w) => w.member_id === user.id);
+        if (!myWrap) return;
+        const key = await unwrapGroupKey(keyPair.privateKey, myWrap.wrapper_public_key_jwk, myWrap.wrapped_key, myWrap.wrapped_iv);
+        if (cancelled) return;
+        setGroupKey(key);
+
+        const members = await listGroupMemberKeys(group.id);
+        const holderIds = new Set(wraps.map((w) => w.member_id));
+        const missing = members.filter((m) => !holderIds.has(m.id) && m.public_key_jwk);
+        if (missing.length > 0) {
+          const newWraps = await Promise.all(
+            missing.map(async (m) => {
+              const { wrappedKey, wrappedIv } = await wrapGroupKey(keyPair.privateKey, m.public_key_jwk!, key);
+              return { memberId: m.id, wrappedKey, wrappedIv, wrapperPublicJwk: myPublicJwk };
+            })
+          );
+          await insertGroupKeyWraps(group.id, newWraps).catch(() => {});
+        }
+      } catch {
+        // couldn't unwrap our copy yet — leave groupKey null, message bubbles show "Encrypted"
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [group?.id, group?.encrypted, user, myPublicJwk]);
 
   useEffect(() => {
     if (!group?.conversation_id) return;
@@ -63,6 +127,15 @@ export function GroupChat() {
     if (!input.trim() || !group?.conversation_id || !user) return;
     const text = input.trim();
     setInput("");
+    if (groupKey) {
+      try {
+        const { ciphertext, iv } = await encryptText(groupKey, text);
+        await sendEncryptedGroupMessage(group.conversation_id, user.id, ciphertext, iv);
+        return;
+      } catch {
+        // encryption failed unexpectedly — fall back to plaintext rather than losing the message
+      }
+    }
     await sendMessage(group.conversation_id, user.id, text);
   };
 
@@ -77,6 +150,33 @@ export function GroupChat() {
     navigate("/chat/groups", { replace: true });
   };
 
+  const handleEnableEncryption = async () => {
+    if (!group || !user || !myPublicJwk || enabling) return;
+    setEnabling(true);
+    try {
+      const { keyPair } = await ensureKeyPair();
+      const members = await listGroupMemberKeys(group.id);
+      const key = await generateGroupKey();
+      const wraps = await Promise.all(
+        members
+          .filter((m): m is typeof m & { public_key_jwk: JsonWebKey } => !!m.public_key_jwk)
+          .map(async (m) => {
+            const { wrappedKey, wrappedIv } = await wrapGroupKey(keyPair.privateKey, m.public_key_jwk, key);
+            return { memberId: m.id, wrappedKey, wrappedIv, wrapperPublicJwk: myPublicJwk };
+          })
+      );
+      await insertGroupKeyWraps(group.id, wraps);
+      await enableGroupEncryption(group.id);
+      setGroup((g) => (g ? { ...g, encrypted: true } : g));
+      setGroupKey(key);
+    } catch {
+      // leave encryption disabled; the menu item stays available to retry
+    } finally {
+      setEnabling(false);
+      setMenuOpen(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">
       <header className="flex items-center gap-3 border-b border-white/5 px-3 py-3 safe-top">
@@ -86,14 +186,27 @@ export function GroupChat() {
         <div className="h-10 w-10 shrink-0 rounded-2xl" style={{ background: gradientFor(id ?? "group") }} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{group?.name ?? "Loading…"}</p>
-          <p className="text-[11px] text-mist">{group ? `${group.member_count.toLocaleString()} members` : ""}</p>
+          <p className="flex items-center gap-1 text-[11px] text-mist">
+            {group?.encrypted && <Lock className="h-2.5 w-2.5 text-emerald-400" />}
+            {group ? `${group.member_count.toLocaleString()} members` : ""}
+          </p>
         </div>
         <div className="relative">
           <button onClick={() => setMenuOpen((o) => !o)} className="rounded-full p-2 text-mist hover:bg-white/5">
             <MoreVertical className="h-4.5 w-4.5" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-2xl glass-strong">
+            <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-2xl glass-strong">
+              {group && !group.encrypted && (
+                <button
+                  onClick={handleEnableEncryption}
+                  disabled={enabling || !myPublicJwk}
+                  className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[13px] font-medium text-emerald-400 hover:bg-white/5 disabled:opacity-50"
+                >
+                  {enabling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  Enable encryption
+                </button>
+              )}
               <button
                 onClick={handleLeave}
                 className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[13px] font-medium text-rose-400 hover:bg-white/5"
@@ -124,7 +237,7 @@ export function GroupChat() {
                       {m.audio_url ? (
                         <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine />
                       ) : (
-                        m.text
+                        <GroupMessageText message={m} groupKey={groupKey} />
                       )}
                     </div>
                   </div>
@@ -139,7 +252,7 @@ export function GroupChat() {
                       {m.audio_url ? (
                         <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine={false} />
                       ) : (
-                        m.text
+                        <GroupMessageText message={m} groupKey={groupKey} />
                       )}
                     </div>
                   </div>
@@ -176,4 +289,28 @@ export function GroupChat() {
       </div>
     </div>
   );
+}
+
+function GroupMessageText({ message, groupKey }: { message: ChatMessage; groupKey: CryptoKey | null }) {
+  const [plain, setPlain] = useState<string | null>(message.ciphertext ? null : message.text);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!message.ciphertext || !message.iv || !groupKey) return;
+    let cancelled = false;
+    decryptText(groupKey, message.ciphertext, message.iv)
+      .then((text) => {
+        if (!cancelled) setPlain(text);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [message, groupKey]);
+
+  if (failed) return <span className="opacity-70">🔒 Couldn't decrypt this message</span>;
+  if (message.ciphertext && plain === null) return <span className="opacity-70">{groupKey ? "Decrypting…" : "🔒 Encrypted"}</span>;
+  return <>{plain}</>;
 }

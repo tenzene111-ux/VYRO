@@ -679,6 +679,7 @@ export type Group = {
   privacy: string;
   creator_id: string;
   conversation_id: string | null;
+  encrypted: boolean;
   created_at: string;
   member_count: number;
 };
@@ -741,6 +742,66 @@ export async function getGroup(groupId: string): Promise<Group | null> {
   if (!data) return null;
   const withCounts = await attachMemberCounts([data]);
   return withCounts[0] ?? null;
+}
+
+// ---------- group chat encryption ----------
+
+export type GroupMemberKey = { id: string; public_key_jwk: JsonWebKey | null };
+
+export async function listGroupMemberKeys(groupId: string): Promise<GroupMemberKey[]> {
+  const { data: members, error } = await supabase.from("group_members").select("user_id").eq("group_id", groupId);
+  if (error) throw error;
+  const memberIds = (members ?? []).map((m) => m.user_id);
+  if (memberIds.length === 0) return [];
+  const { data: profiles, error: profileError } = await supabase.from("profiles").select("id, public_key_jwk").in("id", memberIds);
+  if (profileError) throw profileError;
+  return (profiles ?? []).map((p) => ({ id: p.id, public_key_jwk: p.public_key_jwk as unknown as JsonWebKey | null }));
+}
+
+export type GroupKeyWrap = {
+  member_id: string;
+  wrapped_key: string;
+  wrapped_iv: string;
+  wrapper_public_key_jwk: JsonWebKey;
+};
+
+export async function listGroupKeyWraps(groupId: string): Promise<GroupKeyWrap[]> {
+  const { data, error } = await supabase.from("group_keys").select("*").eq("group_id", groupId);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    member_id: row.member_id,
+    wrapped_key: row.wrapped_key,
+    wrapped_iv: row.wrapped_iv,
+    wrapper_public_key_jwk: row.wrapper_public_key_jwk as unknown as JsonWebKey,
+  }));
+}
+
+export async function insertGroupKeyWraps(
+  groupId: string,
+  wraps: { memberId: string; wrappedKey: string; wrappedIv: string; wrapperPublicJwk: JsonWebKey }[]
+) {
+  if (wraps.length === 0) return;
+  const { error } = await supabase.from("group_keys").insert(
+    wraps.map((w) => ({
+      group_id: groupId,
+      member_id: w.memberId,
+      wrapped_key: w.wrappedKey,
+      wrapped_iv: w.wrappedIv,
+      wrapper_public_key_jwk: w.wrapperPublicJwk as unknown as Database["public"]["Tables"]["group_keys"]["Row"]["wrapper_public_key_jwk"],
+    }))
+  );
+  if (error) throw error;
+}
+
+export async function enableGroupEncryption(groupId: string) {
+  const { error } = await supabase.rpc("enable_group_encryption", { p_group_id: groupId });
+  if (error) throw error;
+}
+
+export async function sendEncryptedGroupMessage(conversationId: string, senderId: string, ciphertext: string, iv: string) {
+  const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: senderId, ciphertext, iv });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "🔒 New message").catch(() => {});
 }
 
 // ---------- marketplace ----------
