@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, FileText, Heart, MessageSquare, UserPlus, Loader2 } from "lucide-react";
+import { ArrowLeft, Users, FileText, Heart, MessageSquare, UserPlus, Loader2, Eye, PlayCircle, ChevronRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getCreatorStats, type CreatorStats } from "../lib/api";
+import { getCreatorStats, listMyVideoStats, type CreatorStats, type VideoPostStat } from "../lib/api";
 
 export function CreatorStudio() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [stats, setStats] = useState<CreatorStats | null>(null);
+  const [videoStats, setVideoStats] = useState<VideoPostStat[] | null>(null);
 
   useEffect(() => {
     if (!user) return;
     getCreatorStats(user.id).then(setStats);
+    listMyVideoStats(user.id).then(setVideoStats).catch(() => setVideoStats([]));
   }, [user]);
 
   return (
@@ -59,6 +61,45 @@ export function CreatorStudio() {
               </span>{" "}
               comments.
             </p>
+          </div>
+
+          <div className="mb-8 mt-4">
+            <p className="mb-2 px-1 text-[13px] font-semibold text-ink">Video performance</p>
+            {videoStats === null ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-mist" />
+              </div>
+            ) : videoStats.length === 0 ? (
+              <div className="rounded-2xl glass-card p-4 text-center text-[12px] text-mist">
+                Post a short video to see views, watch time, and retention here.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl glass-card">
+                {videoStats.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => navigate(`/studio/analytics/${v.id}`)}
+                    className="flex w-full items-center gap-3 border-b border-white/5 p-3 text-left last:border-b-0"
+                  >
+                    <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                      {v.cover_url && <img src={v.cover_url} alt="" className="h-full w-full object-cover" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12.5px] text-ink">{v.text || "Untitled video"}</p>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-mist">
+                        <span className="flex items-center gap-1">
+                          <Eye className="h-3 w-3" /> {v.views.toLocaleString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <PlayCircle className="h-3 w-3" /> {v.completionRate}% completion
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-mist" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}

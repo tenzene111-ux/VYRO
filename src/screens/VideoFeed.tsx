@@ -12,6 +12,7 @@ import {
   toggleFollow,
   isFollowing,
   listLiveNow,
+  recordVideoWatch,
   type FeedPost,
   type Comment,
   type LiveSessionWithHost,
@@ -110,6 +111,7 @@ function VideoTile({
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const tileRef = useRef<HTMLDivElement>(null);
+  const maxWatchedRef = useRef(0);
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
@@ -144,13 +146,24 @@ function VideoTile({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (active) {
-      v.currentTime = 0;
-      v.play().catch(() => {});
-    } else {
+    if (!active) {
       v.pause();
+      return;
     }
-  }, [active]);
+    v.currentTime = 0;
+    maxWatchedRef.current = 0;
+    v.play().catch(() => {});
+    const onTimeUpdate = () => {
+      maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
+    };
+    v.addEventListener("timeupdate", onTimeUpdate);
+    return () => {
+      v.removeEventListener("timeupdate", onTimeUpdate);
+      if (user && maxWatchedRef.current > 0.1) {
+        recordVideoWatch(post.id, user.id, maxWatchedRef.current, post.video_duration_seconds).catch(() => {});
+      }
+    };
+  }, [active, post.id, post.video_duration_seconds, user]);
 
   const handleLike = async () => {
     if (!user) return;

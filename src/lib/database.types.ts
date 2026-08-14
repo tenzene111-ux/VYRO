@@ -147,6 +147,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      video_watch_events: {
+        Row: {
+          id: string;
+          post_id: string;
+          viewer_id: string;
+          watched_seconds: number;
+          video_duration_seconds: number | null;
+          completed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          viewer_id: string;
+          watched_seconds?: number;
+          video_duration_seconds?: number | null;
+          completed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          viewer_id?: string;
+          watched_seconds?: number;
+          video_duration_seconds?: number | null;
+          completed?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       follows: {
         Row: {
           follower_id: string;

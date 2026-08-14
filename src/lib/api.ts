@@ -1075,6 +1075,91 @@ export async function getCreatorStats(userId: string): Promise<CreatorStats> {
   };
 }
 
+export async function recordVideoWatch(
+  postId: string,
+  viewerId: string,
+  watchedSeconds: number,
+  durationSeconds: number | null
+) {
+  const { error } = await supabase.from("video_watch_events").insert({
+    post_id: postId,
+    viewer_id: viewerId,
+    watched_seconds: watchedSeconds,
+    video_duration_seconds: durationSeconds,
+    completed: durationSeconds != null && watchedSeconds >= durationSeconds - 0.5,
+  });
+  if (error) throw error;
+}
+
+export type VideoPostStat = {
+  id: string;
+  text: string;
+  cover_url: string | null;
+  video_duration_seconds: number | null;
+  created_at: string;
+  views: number;
+  avgWatchedSeconds: number;
+  completionRate: number;
+};
+
+export async function listMyVideoStats(userId: string): Promise<VideoPostStat[]> {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("id, text, cover_url, video_duration_seconds, created_at")
+    .eq("author_id", userId)
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!posts || posts.length === 0) return [];
+
+  const postIds = posts.map((p) => p.id);
+  const { data: events } = await supabase
+    .from("video_watch_events")
+    .select("post_id, watched_seconds, completed")
+    .in("post_id", postIds);
+
+  const byPost = new Map<string, { count: number; totalWatched: number; completed: number }>();
+  for (const e of events ?? []) {
+    const cur = byPost.get(e.post_id) ?? { count: 0, totalWatched: 0, completed: 0 };
+    cur.count += 1;
+    cur.totalWatched += Number(e.watched_seconds);
+    if (e.completed) cur.completed += 1;
+    byPost.set(e.post_id, cur);
+  }
+
+  return posts.map((p) => {
+    const agg = byPost.get(p.id) ?? { count: 0, totalWatched: 0, completed: 0 };
+    return {
+      id: p.id,
+      text: p.text,
+      cover_url: p.cover_url,
+      video_duration_seconds: p.video_duration_seconds,
+      created_at: p.created_at,
+      views: agg.count,
+      avgWatchedSeconds: agg.count > 0 ? agg.totalWatched / agg.count : 0,
+      completionRate: agg.count > 0 ? Math.round((agg.completed / agg.count) * 100) : 0,
+    };
+  });
+}
+
+export async function getVideoRetention(
+  postId: string,
+  durationSeconds: number,
+  buckets = 10
+): Promise<{ curve: number[]; sampleSize: number }> {
+  const { data, error } = await supabase.from("video_watch_events").select("watched_seconds").eq("post_id", postId);
+  if (error) throw error;
+  const watched = (data ?? []).map((e) => Number(e.watched_seconds));
+  if (watched.length === 0 || durationSeconds <= 0) return { curve: new Array(buckets + 1).fill(0), sampleSize: 0 };
+  // buckets + 1 points from 0% to 100% of the duration, inclusive, so the last point is a true "reached the end" figure
+  const curve = Array.from({ length: buckets + 1 }, (_, i) => {
+    const t = (i / buckets) * durationSeconds;
+    const reached = watched.filter((w) => w >= t).length;
+    return Math.round((reached / watched.length) * 100);
+  });
+  return { curve, sampleSize: watched.length };
+}
+
 // ---------- calls ----------
 
 export async function logCall(

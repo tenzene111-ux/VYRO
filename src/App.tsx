@@ -29,6 +29,7 @@ const Marketplace = lazy(() => import("./screens/Marketplace").then((m) => ({ de
 const Events = lazy(() => import("./screens/Events").then((m) => ({ default: m.Events })));
 const Wallet = lazy(() => import("./screens/Wallet").then((m) => ({ default: m.Wallet })));
 const CreatorStudio = lazy(() => import("./screens/CreatorStudio").then((m) => ({ default: m.CreatorStudio })));
+const VideoAnalytics = lazy(() => import("./screens/VideoAnalytics").then((m) => ({ default: m.VideoAnalytics })));
 const StoryViewer = lazy(() => import("./screens/StoryViewer").then((m) => ({ default: m.StoryViewer })));
 const Live = lazy(() => import("./screens/Live").then((m) => ({ default: m.Live })));
 const VideoFeed = lazy(() => import("./screens/VideoFeed").then((m) => ({ default: m.VideoFeed })));
@@ -90,6 +91,7 @@ export default function App() {
                     <Route path="/events" element={<Events />} />
                     <Route path="/wallet" element={<Wallet />} />
                     <Route path="/studio" element={<CreatorStudio />} />
+                    <Route path="/studio/analytics/:postId" element={<VideoAnalytics />} />
                     <Route path="/privacy" element={<PrivacySecurity />} />
                   </Route>
 
