@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play, Bookmark } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../context/AuthContext";
-import { addComment, listComments, toggleLike, type Comment, type FeedPost } from "../lib/api";
+import { addComment, listComments, toggleLike, toggleSavePost, type Comment, type FeedPost } from "../lib/api";
 
 export function PostCard({ post }: { post: FeedPost }) {
   const navigate = useNavigate();
@@ -11,6 +11,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
+  const [saved, setSaved] = useState(post.saved_by_me);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentText, setCommentText] = useState("");
@@ -26,6 +27,17 @@ export function PostCard({ post }: { post: FeedPost }) {
     } catch {
       setLiked(!next);
       setLikeCount((c) => c + (next ? -1 : 1));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    const next = !saved;
+    setSaved(next);
+    try {
+      await toggleSavePost(user.id, post.id, saved);
+    } catch {
+      setSaved(!next);
     }
   };
 
@@ -73,6 +85,12 @@ export function PostCard({ post }: { post: FeedPost }) {
             )}
           </p>
         </div>
+        <button
+          onClick={handleSave}
+          className={`rounded-full p-1.5 hover:bg-white/5 ${saved ? "text-cyan-300" : "text-mist hover:text-ink"}`}
+        >
+          <Bookmark className={`h-4.5 w-4.5 ${saved ? "fill-cyan-300" : ""}`} />
+        </button>
         <button className="rounded-full p-1.5 text-mist hover:bg-white/5 hover:text-ink">
           <MoreHorizontal className="h-4.5 w-4.5" />
         </button>

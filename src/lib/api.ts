@@ -50,6 +50,7 @@ export type FeedPost = {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean;
+  saved_by_me: boolean;
 };
 
 export async function listProfiles(excludeId?: string): Promise<Profile[]> {
@@ -122,7 +123,8 @@ function hydrateFeedPosts(
   authors: Profile[],
   likes: { post_id: string; user_id: string }[],
   comments: { post_id: string }[],
-  currentUserId: string
+  currentUserId: string,
+  savedPostIds: Set<string> = new Set()
 ): FeedPost[] {
   const authorById = new Map(authors.map((a) => [a.id, a]));
   const likesByPost = new Map<string, { count: number; mine: boolean }>();
@@ -156,6 +158,7 @@ function hydrateFeedPosts(
         like_count: likeInfo.count,
         comment_count: commentsByPost.get(p.id) ?? 0,
         liked_by_me: likeInfo.mine,
+        saved_by_me: savedPostIds.has(p.id),
       };
     })
     .filter((p): p is FeedPost => p !== null);
@@ -173,13 +176,14 @@ export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> 
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
   const postIds = posts.map((p) => p.id);
 
-  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+  const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
     supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
+    listSavedPostIds(currentUserId),
   ]);
 
-  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId);
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds);
 }
 
 export async function listTopPosts(currentUserId: string, limit = 5): Promise<FeedPost[]> {
@@ -200,13 +204,14 @@ export async function listVideoPosts(currentUserId: string): Promise<FeedPost[]>
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
   const postIds = posts.map((p) => p.id);
 
-  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+  const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
     supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
+    listSavedPostIds(currentUserId),
   ]);
 
-  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId);
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds);
 }
 
 export async function searchPeopleAndPosts(
@@ -232,15 +237,16 @@ export async function searchPeopleAndPosts(
 
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
   const postIds = posts.map((p) => p.id);
-  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+  const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
     supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
+    listSavedPostIds(currentUserId),
   ]);
 
   return {
     people: people ?? [],
-    posts: hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId),
+    posts: hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds),
   };
 }
 
@@ -289,6 +295,49 @@ export async function toggleLike(postId: string, userId: string, currentlyLiked:
     if (error) throw error;
     notifyPostAction(postId, userId, "like").catch(() => {});
   }
+}
+
+export async function listSavedPostIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase.from("saved_posts").select("post_id").eq("user_id", userId);
+  return new Set((data ?? []).map((s) => s.post_id));
+}
+
+export async function toggleSavePost(userId: string, postId: string, currentlySaved: boolean) {
+  if (currentlySaved) {
+    const { error } = await supabase.from("saved_posts").delete().eq("user_id", userId).eq("post_id", postId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("saved_posts").insert({ user_id: userId, post_id: postId });
+    if (error) throw error;
+  }
+}
+
+export async function listSavedPosts(userId: string): Promise<FeedPost[]> {
+  const { data: saved, error } = await supabase
+    .from("saved_posts")
+    .select("post_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!saved || saved.length === 0) return [];
+
+  const postIds = saved.map((s) => s.post_id);
+  const { data: posts } = await supabase
+    .from("posts")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, created_at, author_id")
+    .in("id", postIds);
+  if (!posts || posts.length === 0) return [];
+
+  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIds),
+    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_comments").select("post_id").in("post_id", postIds),
+  ]);
+
+  const hydrated = hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], userId, new Set(postIds));
+  const orderIndex = new Map(postIds.map((id, i) => [id, i]));
+  return hydrated.sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
 }
 
 export async function listFollowing(userId: string): Promise<Set<string>> {

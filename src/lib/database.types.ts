@@ -123,6 +123,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      saved_posts: {
+        Row: {
+          user_id: string;
+          post_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          post_id: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          post_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       follows: {
         Row: {
           follower_id: string;

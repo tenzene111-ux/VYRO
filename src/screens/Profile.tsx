@@ -9,7 +9,7 @@ import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
 import {
   countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
-  listPostsByAuthor, toggleFollow, updateProfile, type SimplePost,
+  listPostsByAuthor, listSavedPosts, toggleFollow, updateProfile, type SimplePost, type FeedPost,
 } from "../lib/api";
 import { uploadImage } from "../lib/storage";
 
@@ -20,6 +20,35 @@ const tabs = [
   { id: "reposts", icon: Repeat2 },
 ];
 
+type ThumbPost = { id: string; text: string; image_url: string | null; video_url: string | null; cover_url: string | null };
+
+function PostThumb({ p }: { p: ThumbPost }) {
+  if (p.video_url) {
+    return (
+      <div className="relative aspect-square overflow-hidden bg-black">
+        {p.cover_url ? (
+          <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <video src={p.video_url} className="h-full w-full object-cover" muted />
+        )}
+        <Clapperboard className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" />
+      </div>
+    );
+  }
+  if (p.image_url) {
+    return (
+      <div className="aspect-square overflow-hidden">
+        <img src={p.image_url} alt="" className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+  return (
+    <div className="relative aspect-square" style={{ background: gradientFor(p.id) }}>
+      <p className="absolute inset-0 line-clamp-4 p-2 text-[10px] font-medium text-white/90">{p.text}</p>
+    </div>
+  );
+}
+
 export function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,6 +57,7 @@ export function Profile() {
 
   const [viewedProfile, setViewedProfile] = useState<ProfileRow | null>(isMe ? myProfile : null);
   const [posts, setPosts] = useState<SimplePost[]>([]);
+  const [savedPosts, setSavedPosts] = useState<FeedPost[] | null>(null);
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
   const [tab, setTab] = useState("posts");
@@ -50,6 +80,14 @@ export function Profile() {
     );
     if (!isMe && user) isFollowing(user.id, targetId).then(setFollowing);
   }, [targetId, isMe, user]);
+
+  useEffect(() => {
+    if (tab !== "saved" || !isMe || !user || savedPosts !== null) return;
+    listSavedPosts(user.id).then(setSavedPosts).catch(() => setSavedPosts([]));
+  }, [tab, isMe, user, savedPosts]);
+
+  const visibleTabs = isMe ? tabs : tabs.filter((t) => t.id !== "saved");
+  const videoPosts = posts.filter((p) => p.video_url);
 
   const handleToggleFollow = async () => {
     if (!user || !targetId) return;
@@ -157,7 +195,7 @@ export function Profile() {
       </div>
 
       <div className="mt-6 flex justify-center gap-2 border-b border-white/5 px-5">
-        {tabs.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -176,29 +214,39 @@ export function Profile() {
           <p className="py-10 text-center text-[13px] text-mist">No posts yet.</p>
         ) : (
           <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
-            {posts.map((p) =>
-              p.video_url ? (
-                <div key={p.id} className="relative aspect-square overflow-hidden bg-black">
-                  {p.cover_url ? (
-                    <img src={p.cover_url} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <video src={p.video_url} className="h-full w-full object-cover" muted />
-                  )}
-                  <Clapperboard className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" />
-                </div>
-              ) : p.image_url ? (
-                <div key={p.id} className="aspect-square overflow-hidden">
-                  <img src={p.image_url} alt="" className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <div key={p.id} className="relative aspect-square" style={{ background: gradientFor(p.id) }}>
-                  <p className="absolute inset-0 line-clamp-4 p-2 text-[10px] font-medium text-white/90">{p.text}</p>
-                </div>
-              )
-            )}
+            {posts.map((p) => (
+              <PostThumb key={p.id} p={p} />
+            ))}
           </div>
         ))}
-      {tab !== "posts" && <p className="py-10 text-center text-[13px] text-mist">Nothing here yet.</p>}
+
+      {tab === "videos" &&
+        (videoPosts.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-mist">No videos yet.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
+            {videoPosts.map((p) => (
+              <PostThumb key={p.id} p={p} />
+            ))}
+          </div>
+        ))}
+
+      {tab === "saved" &&
+        (savedPosts === null ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-mist" />
+          </div>
+        ) : savedPosts.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-mist">Nothing saved yet.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
+            {savedPosts.map((p) => (
+              <PostThumb key={p.id} p={p} />
+            ))}
+          </div>
+        ))}
+
+      {tab === "reposts" && <p className="py-10 text-center text-[13px] text-mist">Nothing here yet.</p>}
 
       {editing && isMe && myProfile && (
         <EditProfileModal

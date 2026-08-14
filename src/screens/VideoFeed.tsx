@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Volume2, VolumeX, Radio } from "lucide-react";
+import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Volume2, VolumeX, Radio, Bookmark } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -8,6 +8,7 @@ import {
   listComments,
   addComment,
   toggleLike,
+  toggleSavePost,
   toggleFollow,
   isFollowing,
   listLiveNow,
@@ -112,6 +113,7 @@ function VideoTile({
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
+  const [saved, setSaved] = useState(post.saved_by_me);
   const [following, setFollowingState] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [comments, setComments] = useState<Comment[] | null>(null);
@@ -160,6 +162,17 @@ function VideoTile({
     } catch {
       setLiked(!next);
       setLikeCount((c) => c + (next ? -1 : 1));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    const next = !saved;
+    setSaved(next);
+    try {
+      await toggleSavePost(user.id, post.id, saved);
+    } catch {
+      setSaved(!next);
     }
   };
 
@@ -235,6 +248,10 @@ function VideoTile({
             <span className="text-[11px] font-semibold">Off</span>
           </div>
         )}
+        <button onClick={handleSave} className="flex flex-col items-center gap-1 text-white">
+          <Bookmark className={`h-7 w-7 ${saved ? "fill-cyan-300 text-cyan-300" : ""}`} />
+          <span className="text-[11px] font-semibold">Save</span>
+        </button>
         <button onClick={handleShare} className="flex flex-col items-center gap-1 text-white">
           <Share2 className="h-7 w-7" />
           <span className="text-[11px] font-semibold">Share</span>
