@@ -6,7 +6,7 @@ import { totalDuration, type ShortProject, type Visibility } from "../../lib/sho
 import { formatDuration } from "../../lib/shorts/media";
 import { renderProject, extractCoverFrame } from "../../lib/shorts/render";
 import { uploadImage, uploadVideoBlob } from "../../lib/storage";
-import { createVideoPost } from "../../lib/api";
+import { createVideoPost, getPostBrief, type PostBrief } from "../../lib/api";
 import { suggestCaptions, type CaptionSuggestions } from "../../lib/ai";
 import { useAuth } from "../../context/AuthContext";
 import { Avatar } from "../../components/Avatar";
@@ -24,6 +24,7 @@ export function ShortsPublish() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [project, setProject] = useState<ShortProject | null | undefined>(undefined);
+  const [remixSource, setRemixSource] = useState<PostBrief | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [customCoverFile, setCustomCoverFile] = useState<File | null>(null);
   const [customCoverPreview, setCustomCoverPreview] = useState<string | null>(null);
@@ -43,6 +44,11 @@ export function ShortsPublish() {
     if (!id) return;
     loadProject(id).then((p) => setProject(p ?? null));
   }, [id]);
+
+  useEffect(() => {
+    if (!project?.remix) return;
+    getPostBrief(project.remix.sourcePostId).then(setRemixSource).catch(() => {});
+  }, [project?.remix]);
 
   useEffect(() => {
     if (!project || customCoverFile) return;
@@ -100,6 +106,8 @@ export function ShortsPublish() {
         durationSeconds: totalDuration(project),
         visibility: project.visibility,
         commentsEnabled: project.commentsEnabled,
+        remixType: project.remix?.type ?? null,
+        remixOfPostId: project.remix?.sourcePostId ?? null,
       });
 
       await deleteProject(project.id);
@@ -181,6 +189,15 @@ export function ShortsPublish() {
         </button>
         <h1 className="font-display text-xl font-bold text-ink">Publish</h1>
       </header>
+
+      {project.remix && (
+        <div className="mb-4 flex items-center gap-2 rounded-2xl chip px-3.5 py-2.5">
+          <span className="text-[12px] font-medium text-violet-300">
+            {project.remix.type === "duet" ? "🎬 Duet" : "✂️ Stitch"}
+            {remixSource ? ` with @${remixSource.author.username}` : ""}
+          </span>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-3">
         <div className="relative h-32 w-20 shrink-0 overflow-hidden rounded-2xl bg-black">

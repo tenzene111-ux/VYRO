@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Volume2, VolumeX, Radio, Bookmark } from "lucide-react";
+import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Volume2, VolumeX, Radio, Bookmark, Users, Scissors } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -256,6 +256,14 @@ function VideoTile({
           <Share2 className="h-7 w-7" />
           <span className="text-[11px] font-semibold">Share</span>
         </button>
+        <button onClick={() => navigate(`/create/reel/duet/${post.id}?mode=duet`)} className="flex flex-col items-center gap-1 text-white">
+          <Users className="h-6.5 w-6.5" />
+          <span className="text-[11px] font-semibold">Duet</span>
+        </button>
+        <button onClick={() => navigate(`/create/reel/duet/${post.id}?mode=stitch`)} className="flex flex-col items-center gap-1 text-white">
+          <Scissors className="h-6.5 w-6.5" />
+          <span className="text-[11px] font-semibold">Stitch</span>
+        </button>
       </div>
 
       <div className="absolute inset-x-4 bottom-8 z-10 max-w-[75%]">
@@ -274,6 +282,14 @@ function VideoTile({
             </button>
           )}
         </div>
+        {post.remix_type && post.remix_of_post_id && (
+          <button
+            onClick={() => navigate(`/watch/${post.remix_of_post_id}`)}
+            className="mb-1.5 flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur"
+          >
+            {post.remix_type === "duet" ? "🎬 Duet" : "✂️ Stitch"} · view original
+          </button>
+        )}
         {post.text && <p className="text-[13px] leading-snug text-white/90">{post.text}</p>}
       </div>
 

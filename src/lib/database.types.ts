@@ -53,6 +53,8 @@ export type Database = {
           video_duration_seconds: number | null;
           comments_enabled: boolean;
           visibility: string;
+          remix_type: string | null;
+          remix_of_post_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -65,6 +67,8 @@ export type Database = {
           video_duration_seconds?: number | null;
           comments_enabled?: boolean;
           visibility?: string;
+          remix_type?: string | null;
+          remix_of_post_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -77,6 +81,8 @@ export type Database = {
           video_duration_seconds?: number | null;
           comments_enabled?: boolean;
           visibility?: string;
+          remix_type?: string | null;
+          remix_of_post_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

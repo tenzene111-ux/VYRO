@@ -36,6 +36,7 @@ const PrivacySecurity = lazy(() => import("./screens/PrivacySecurity").then((m) 
 const ShortsStudio = lazy(() => import("./screens/shorts/ShortsStudio").then((m) => ({ default: m.ShortsStudio })));
 const ShortsCamera = lazy(() => import("./screens/shorts/ShortsCamera").then((m) => ({ default: m.ShortsCamera })));
 const ShortsUpload = lazy(() => import("./screens/shorts/ShortsUpload").then((m) => ({ default: m.ShortsUpload })));
+const ShortsDuet = lazy(() => import("./screens/shorts/ShortsDuet").then((m) => ({ default: m.ShortsDuet })));
 const ShortsEditor = lazy(() => import("./screens/shorts/ShortsEditor").then((m) => ({ default: m.ShortsEditor })));
 const ShortsPublish = lazy(() => import("./screens/shorts/ShortsPublish").then((m) => ({ default: m.ShortsPublish })));
 const GoLive = lazy(() => import("./screens/GoLive").then((m) => ({ default: m.GoLive })));
@@ -113,6 +114,7 @@ export default function App() {
                   <Route path="/create/reel" element={<ShortsStudio />} />
                   <Route path="/create/reel/camera" element={<ShortsCamera />} />
                   <Route path="/create/reel/upload" element={<ShortsUpload />} />
+                  <Route path="/create/reel/duet/:postId" element={<ShortsDuet />} />
                   <Route path="/create/reel/edit/:id" element={<ShortsEditor />} />
                   <Route path="/create/reel/publish/:id" element={<ShortsPublish />} />
                   <Route path="/live/:id" element={<LiveRoom />} />

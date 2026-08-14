@@ -84,6 +84,8 @@ export type PublishState =
   | "published"
   | "failed";
 
+export type RemixType = "duet" | "stitch";
+
 export type ShortProject = {
   id: string;
   createdAt: number;
@@ -102,6 +104,7 @@ export type ShortProject = {
   status: PublishState;
   publishError: string | null;
   publishedPostId: string | null;
+  remix: { type: RemixType; sourcePostId: string } | null;
 };
 
 export function totalDuration(project: ShortProject): number {
@@ -137,5 +140,6 @@ export function createEmptyProject(): ShortProject {
     status: "draft",
     publishError: null,
     publishedPostId: null,
+    remix: null,
   };
 }
