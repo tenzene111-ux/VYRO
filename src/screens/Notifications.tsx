@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageSquare, MessageCircle, UserPlus, Gift, Loader2 } from "lucide-react";
+import { Heart, MessageSquare, UserPlus, Gift, Loader2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import { listNotifications, markAllNotificationsRead, subscribeToNotifications, type NotificationRow } from "../lib/api";
@@ -45,9 +45,6 @@ export function Notifications() {
     <div className="safe-top">
       <header className="flex items-center justify-between px-4 py-4">
         <h1 className="font-display text-xl font-bold text-ink">Notifications</h1>
-        <button onClick={() => navigate("/chat")} className="rounded-full p-2 chip text-mist">
-          <MessageCircle className="h-4.5 w-4.5" />
-        </button>
       </header>
 
       {notifications === null ? (
