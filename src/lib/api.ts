@@ -2059,3 +2059,27 @@ export async function getTodayRewardedWatchCount(userId: string): Promise<number
     .gte("created_at", `${today}T00:00:00Z`);
   return Math.min(count ?? 0, 5);
 }
+
+export type TrendingHashtag = { tag: string; count: number };
+
+export async function listTrendingHashtags(limit = 6): Promise<TrendingHashtag[]> {
+  const { data: posts } = await supabase
+    .from("posts")
+    .select("text")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const counts = new Map<string, number>();
+  for (const p of posts ?? []) {
+    const matches = p.text?.match(/#[a-zA-Z][a-zA-Z0-9_]*/g) ?? [];
+    for (const raw of matches) {
+      const tag = raw.toLowerCase();
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([tag, count]) => ({ tag, count }));
+}

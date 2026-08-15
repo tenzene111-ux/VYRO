@@ -4,7 +4,10 @@ import { Search, X, QrCode, MessageCircle, Flame, Music, Plane, Gamepad2, Trophy
 import { Avatar } from "../components/Avatar";
 import { gradientFor } from "../lib/gradients";
 import { useAuth, type Profile } from "../context/AuthContext";
-import { listFollowing, listProfiles, listTopPosts, searchPeopleAndPosts, toggleFollow, type FeedPost } from "../lib/api";
+import {
+  listFollowing, listProfiles, listTopPosts, listTrendingHashtags, searchPeopleAndPosts, toggleFollow,
+  type FeedPost, type TrendingHashtag,
+} from "../lib/api";
 
 const categories = [
   { id: "trending", label: "Trending", icon: Flame, grad: "from-orange-500 to-pink-500" },
@@ -20,6 +23,7 @@ export function Explore() {
   const { user } = useAuth();
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [topPosts, setTopPosts] = useState<FeedPost[]>([]);
+  const [hashtags, setHashtags] = useState<TrendingHashtag[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ people: Profile[]; posts: FeedPost[] } | null>(null);
   const [searching, setSearching] = useState(false);
@@ -30,6 +34,7 @@ export function Explore() {
       setSuggested(profiles.filter((p) => !following.has(p.id)).slice(0, 4));
     });
     listTopPosts(user.id, 5).then(setTopPosts);
+    listTrendingHashtags().then(setHashtags);
   }, [user]);
 
   useEffect(() => {
@@ -79,7 +84,7 @@ export function Explore() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people or posts"
+          placeholder="Search videos, users, hashtags"
           className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
         />
         {query && (
@@ -144,6 +149,26 @@ export function Explore() {
         </div>
       ) : (
         <>
+          {hashtags.length > 0 && (
+            <>
+              <SectionHeader title="Trending Hashtags" />
+              <div className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4">
+                {hashtags.map((h) => (
+                  <button
+                    key={h.tag}
+                    onClick={() => setQuery(h.tag)}
+                    className="flex shrink-0 flex-col items-start gap-0.5 rounded-2xl chip px-3.5 py-2.5"
+                  >
+                    <span className="text-[13px] font-semibold text-cyan-300">{h.tag}</span>
+                    <span className="text-[10.5px] text-mist">
+                      {h.count} {h.count === 1 ? "post" : "posts"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
           <div className="mb-6 grid grid-cols-3 gap-3">
             {categories.map((c) => (
               <button
