@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User, Lock, Bell, Shield, Database, HelpCircle, ChevronRight, Moon, Sun, Monitor, Wallet, Sparkles,
-  LogOut, EyeOff, Fingerprint,
+  LogOut, EyeOff, Fingerprint, Users2, Gift,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../context/AuthContext";
@@ -43,6 +43,8 @@ export function ChatSettingsTab() {
         <Row icon={User} label="Account details" onClick={() => {}} />
         <Row icon={Wallet} label="VYRO Wallet" onClick={() => navigate("/wallet")} />
         <Row icon={Sparkles} label="Creator Studio" onClick={() => navigate("/studio")} />
+        <Row icon={Users2} label="Community" onClick={() => navigate("/community")} />
+        <Row icon={Gift} label="Rewards" onClick={() => navigate("/rewards")} />
       </SettingsGroup>
 
       <SettingsGroup title="Preferences">

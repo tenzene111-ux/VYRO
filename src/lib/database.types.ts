@@ -14,6 +14,7 @@ export type Database = {
           coins: number;
           avatar_url: string | null;
           public_key_jwk: Json | null;
+          referred_by: string | null;
           created_at: string;
         };
         Insert: {
@@ -26,6 +27,7 @@ export type Database = {
           coins?: number;
           avatar_url?: string | null;
           public_key_jwk?: Json | null;
+          referred_by?: string | null;
           created_at?: string;
         };
         Update: {
@@ -38,6 +40,7 @@ export type Database = {
           coins?: number;
           avatar_url?: string | null;
           public_key_jwk?: Json | null;
+          referred_by?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -55,6 +58,7 @@ export type Database = {
           visibility: string;
           remix_type: string | null;
           remix_of_post_id: string | null;
+          community_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -69,6 +73,7 @@ export type Database = {
           visibility?: string;
           remix_type?: string | null;
           remix_of_post_id?: string | null;
+          community_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -83,6 +88,106 @@ export type Database = {
           visibility?: string;
           remix_type?: string | null;
           remix_of_post_id?: string | null;
+          community_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      communities: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          cover_url: string | null;
+          logo_url: string | null;
+          category: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          cover_url?: string | null;
+          logo_url?: string | null;
+          category?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          cover_url?: string | null;
+          logo_url?: string | null;
+          category?: string | null;
+          created_by?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      community_members: {
+        Row: {
+          community_id: string;
+          user_id: string;
+          role: string;
+          joined_at: string;
+        };
+        Insert: {
+          community_id: string;
+          user_id: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Update: {
+          community_id?: string;
+          user_id?: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Relationships: [];
+      };
+      daily_checkins: {
+        Row: {
+          user_id: string;
+          checkin_date: string;
+          streak_count: number;
+          reward_coins: number;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          checkin_date: string;
+          streak_count?: number;
+          reward_coins?: number;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          checkin_date?: string;
+          streak_count?: number;
+          reward_coins?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      referrals: {
+        Row: {
+          id: string;
+          referrer_id: string;
+          referred_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          referrer_id: string;
+          referred_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          referrer_id?: string;
+          referred_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -926,6 +1031,22 @@ export type Database = {
       can_view_live: {
         Args: { l_id: string };
         Returns: boolean;
+      };
+      create_community: {
+        Args: { p_name: string; p_description: string | null; p_category: string | null; p_cover_url: string | null; p_logo_url: string | null };
+        Returns: string;
+      };
+      join_community: {
+        Args: { p_community_id: string };
+        Returns: undefined;
+      };
+      leave_community: {
+        Args: { p_community_id: string };
+        Returns: undefined;
+      };
+      claim_daily_checkin: {
+        Args: Record<string, never>;
+        Returns: { streak: number; reward: number }[];
       };
       get_match_score: {
         Args: { p_match_id: string };

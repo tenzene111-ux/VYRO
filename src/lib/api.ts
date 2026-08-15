@@ -1685,3 +1685,166 @@ export function subscribeToLiveMatchesFor(liveId: string, onChange: (row: LiveMa
     supabase.removeChannel(channelB);
   };
 }
+
+// ---------- communities ----------
+
+export type Community = {
+  id: string;
+  name: string;
+  description: string | null;
+  cover_url: string | null;
+  logo_url: string | null;
+  category: string | null;
+  created_by: string;
+  created_at: string;
+  member_count: number;
+  my_role: "member" | "moderator" | "admin" | null;
+};
+
+async function hydrateCommunities(
+  rows: Database["public"]["Tables"]["communities"]["Row"][],
+  currentUserId: string
+): Promise<Community[]> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((c) => c.id);
+  const { data: members } = await supabase.from("community_members").select("community_id, user_id, role").in("community_id", ids);
+  const counts = new Map<string, number>();
+  const myRole = new Map<string, "member" | "moderator" | "admin">();
+  for (const m of members ?? []) {
+    counts.set(m.community_id, (counts.get(m.community_id) ?? 0) + 1);
+    if (m.user_id === currentUserId) myRole.set(m.community_id, m.role as "member" | "moderator" | "admin");
+  }
+  return rows.map((c) => ({ ...c, member_count: counts.get(c.id) ?? 0, my_role: myRole.get(c.id) ?? null }));
+}
+
+export async function listCommunities(currentUserId: string): Promise<Community[]> {
+  const { data, error } = await supabase.from("communities").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return hydrateCommunities(data ?? [], currentUserId);
+}
+
+export async function listMyCommunities(currentUserId: string): Promise<Community[]> {
+  const { data: memberships } = await supabase.from("community_members").select("community_id").eq("user_id", currentUserId);
+  const ids = (memberships ?? []).map((m) => m.community_id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("communities").select("*").in("id", ids);
+  if (error) throw error;
+  return hydrateCommunities(data ?? [], currentUserId);
+}
+
+export async function getCommunity(communityId: string, currentUserId: string): Promise<Community | null> {
+  const { data } = await supabase.from("communities").select("*").eq("id", communityId).single();
+  if (!data) return null;
+  const withCounts = await hydrateCommunities([data], currentUserId);
+  return withCounts[0] ?? null;
+}
+
+export async function createCommunity(params: {
+  name: string;
+  description: string;
+  category: string;
+  coverUrl?: string | null;
+  logoUrl?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("create_community", {
+    p_name: params.name,
+    p_description: params.description || null,
+    p_category: params.category || null,
+    p_cover_url: params.coverUrl ?? null,
+    p_logo_url: params.logoUrl ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function joinCommunity(communityId: string) {
+  const { error } = await supabase.rpc("join_community", { p_community_id: communityId });
+  if (error) throw error;
+}
+
+export async function leaveCommunity(communityId: string) {
+  const { error } = await supabase.rpc("leave_community", { p_community_id: communityId });
+  if (error) throw error;
+}
+
+export async function listCommunityMembers(communityId: string): Promise<(Profile & { role: string })[]> {
+  const { data: members, error } = await supabase
+    .from("community_members")
+    .select("user_id, role")
+    .eq("community_id", communityId);
+  if (error) throw error;
+  const ids = (members ?? []).map((m) => m.user_id);
+  if (ids.length === 0) return [];
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", ids);
+  const roleById = new Map((members ?? []).map((m) => [m.user_id, m.role]));
+  return (profiles ?? []).map((p) => ({ ...p, role: roleById.get(p.id) ?? "member" }));
+}
+
+export async function listCommunityPosts(communityId: string, currentUserId: string): Promise<FeedPost[]> {
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .eq("community_id", communityId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (!posts || posts.length === 0) return [];
+
+  const authorIds = [...new Set(posts.map((p) => p.author_id))];
+  const postIds = posts.map((p) => p.id);
+  const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIds),
+    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_comments").select("post_id").in("post_id", postIds),
+    listSavedPostIds(currentUserId),
+  ]);
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds);
+}
+
+export async function createCommunityPost(communityId: string, authorId: string, text: string, imageUrl?: string) {
+  const { error } = await supabase
+    .from("posts")
+    .insert({ author_id: authorId, text, image_url: imageUrl ?? null, community_id: communityId });
+  if (error) throw error;
+}
+
+// ---------- rewards ----------
+
+export type DailyCheckin = { checkin_date: string; streak_count: number; reward_coins: number };
+
+export async function getTodayCheckin(userId: string): Promise<DailyCheckin | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("daily_checkins")
+    .select("checkin_date, streak_count, reward_coins")
+    .eq("user_id", userId)
+    .eq("checkin_date", today)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function getCurrentStreak(userId: string): Promise<number> {
+  const { data } = await supabase
+    .from("daily_checkins")
+    .select("streak_count")
+    .eq("user_id", userId)
+    .order("checkin_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.streak_count ?? 0;
+}
+
+export async function claimDailyCheckin(): Promise<{ streak: number; reward: number }> {
+  const { data, error } = await supabase.rpc("claim_daily_checkin");
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return { streak: row.streak, reward: row.reward };
+}
+
+export async function listReferrals(userId: string): Promise<number> {
+  const { count } = await supabase
+    .from("referrals")
+    .select("id", { count: "exact", head: true })
+    .eq("referrer_id", userId);
+  return count ?? 0;
+}

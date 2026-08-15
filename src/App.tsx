@@ -34,6 +34,10 @@ const StoryViewer = lazy(() => import("./screens/StoryViewer").then((m) => ({ de
 const Live = lazy(() => import("./screens/Live").then((m) => ({ default: m.Live })));
 const VideoFeed = lazy(() => import("./screens/VideoFeed").then((m) => ({ default: m.VideoFeed })));
 const PrivacySecurity = lazy(() => import("./screens/PrivacySecurity").then((m) => ({ default: m.PrivacySecurity })));
+const Community = lazy(() => import("./screens/Community").then((m) => ({ default: m.Community })));
+const CommunityDetail = lazy(() => import("./screens/CommunityDetail").then((m) => ({ default: m.CommunityDetail })));
+const CreateCommunity = lazy(() => import("./screens/CreateCommunity").then((m) => ({ default: m.CreateCommunity })));
+const Rewards = lazy(() => import("./screens/Rewards").then((m) => ({ default: m.Rewards })));
 const ShortsStudio = lazy(() => import("./screens/shorts/ShortsStudio").then((m) => ({ default: m.ShortsStudio })));
 const ShortsCamera = lazy(() => import("./screens/shorts/ShortsCamera").then((m) => ({ default: m.ShortsCamera })));
 const ShortsUpload = lazy(() => import("./screens/shorts/ShortsUpload").then((m) => ({ default: m.ShortsUpload })));
@@ -93,6 +97,9 @@ export default function App() {
                     <Route path="/studio" element={<CreatorStudio />} />
                     <Route path="/studio/analytics/:postId" element={<VideoAnalytics />} />
                     <Route path="/privacy" element={<PrivacySecurity />} />
+                    <Route path="/community" element={<Community />} />
+                    <Route path="/community/:id" element={<CommunityDetail />} />
+                    <Route path="/rewards" element={<Rewards />} />
                   </Route>
 
                   <Route path="/chat" element={<ChatShell />}>
@@ -110,6 +117,7 @@ export default function App() {
                   <Route path="/call/video/:id" element={<VideoCall />} />
                   <Route path="/create/post" element={<CreatePost />} />
                   <Route path="/create/group" element={<CreateGroup />} />
+                  <Route path="/create/community" element={<CreateCommunity />} />
                   <Route path="/create/event" element={<CreateEvent />} />
                   <Route path="/create/sell" element={<CreateListing />} />
                   <Route path="/create/story" element={<CreateStory />} />

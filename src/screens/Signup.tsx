@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { User, AtSign, Mail, Lock, Loader2, CheckCircle2 } from "lucide-react";
 import { Logo, LogoMark } from "../components/Logo";
 import { useAuth } from "../context/AuthContext";
 
 export function Signup() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const referredByUsername = searchParams.get("ref") ?? undefined;
   const { signUp } = useAuth();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -42,6 +44,7 @@ export function Signup() {
     const { error, session } = await signUp(email.trim(), password, {
       name: name.trim(),
       username: username.trim().toLowerCase(),
+      referred_by_username: referredByUsername,
     });
     setBusy(false);
     if (error) {
