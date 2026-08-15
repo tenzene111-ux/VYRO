@@ -85,12 +85,6 @@ export function PostCard({ post }: { post: FeedPost }) {
             )}
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          className={`rounded-full p-1.5 hover:bg-white/5 ${saved ? "text-cyan-300" : "text-mist hover:text-ink"}`}
-        >
-          <Bookmark className={`h-4.5 w-4.5 ${saved ? "fill-cyan-300" : ""}`} />
-        </button>
         <button className="rounded-full p-1.5 text-mist hover:bg-white/5 hover:text-ink">
           <MoreHorizontal className="h-4.5 w-4.5" />
         </button>
@@ -126,38 +120,22 @@ export function PostCard({ post }: { post: FeedPost }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between px-4 pt-3 text-[12px] text-mist">
-        <span>{likeCount > 0 && `${formatCount(likeCount)} ${likeCount === 1 ? "like" : "likes"}`}</span>
-        <span>{commentCount > 0 && `${commentCount} ${commentCount === 1 ? "comment" : "comments"}`}</span>
-      </div>
-
-      <div className="mt-2 grid grid-cols-3 gap-1 border-t border-white/5 px-2 py-1">
-        <button
-          onClick={handleLike}
-          className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium transition-colors ${
-            liked ? "text-rose-400" : "text-mist hover:bg-white/5 hover:text-ink"
-          }`}
-        >
-          <Heart className={`h-4.5 w-4.5 ${liked ? "fill-rose-400" : ""}`} />
-          {liked ? "Liked" : "Like"}
+      <div className="mt-3 flex items-center gap-4 px-4 text-[12.5px] font-medium text-mist">
+        <button onClick={handleLike} className={`flex items-center gap-1.5 ${liked ? "text-rose-400" : "hover:text-ink"}`}>
+          <Heart className={`h-5 w-5 ${liked ? "fill-rose-400" : ""}`} />
+          {likeCount > 0 && formatCount(likeCount)}
         </button>
-        {post.comments_enabled ? (
-          <button
-            onClick={handleOpenComments}
-            className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist transition-colors hover:bg-white/5 hover:text-ink"
-          >
-            <MessageSquare className="h-4.5 w-4.5" />
-            Comment
+        {post.comments_enabled && (
+          <button onClick={handleOpenComments} className="flex items-center gap-1.5 hover:text-ink">
+            <MessageSquare className="h-5 w-5" />
+            {commentCount > 0 && formatCount(commentCount)}
           </button>
-        ) : (
-          <span className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist/40">
-            <MessageSquare className="h-4.5 w-4.5" />
-            Off
-          </span>
         )}
-        <button className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-mist transition-colors hover:bg-white/5 hover:text-ink">
-          <Share2 className="h-4.5 w-4.5" />
-          Share
+        <button className="flex items-center gap-1.5 hover:text-ink">
+          <Share2 className="h-5 w-5" />
+        </button>
+        <button onClick={handleSave} className={`ml-auto ${saved ? "text-cyan-300" : "hover:text-ink"}`}>
+          <Bookmark className={`h-5 w-5 ${saved ? "fill-cyan-300" : ""}`} />
         </button>
       </div>
 

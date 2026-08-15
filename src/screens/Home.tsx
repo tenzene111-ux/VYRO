@@ -1,19 +1,29 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, MessageCircle, Plus, Loader2 } from "lucide-react";
+import { Search, Bell, Plus, Loader2, Clapperboard, FileText } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
+import { ShortVideoCard } from "../components/ShortVideoCard";
 import { useAuth, type Profile } from "../context/AuthContext";
 import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
 import { rankForYou, filterFollowing } from "../lib/ranking";
 
+type Tab = "forYou" | "following" | "bhutan" | "trending";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "forYou", label: "For You" },
+  { id: "following", label: "Following" },
+  { id: "bhutan", label: "Bhutan" },
+  { id: "trending", label: "Trending" },
+];
+
 export function Home() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
-  const [tab, setTab] = useState<"forYou" | "following">("forYou");
+  const [tab, setTab] = useState<Tab>("forYou");
+  const [feedMode, setFeedMode] = useState<"video" | "posts">("posts");
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
 
   useEffect(() => {
@@ -32,12 +42,20 @@ export function Home() {
     });
   }, [user]);
 
-  const posts =
+  const tabFiltered =
     allPosts === null
       ? null
       : tab === "forYou"
       ? rankForYou(allPosts, followingIds, user?.id ?? "")
-      : filterFollowing(allPosts, followingIds, user?.id ?? "");
+      : tab === "following"
+      ? filterFollowing(allPosts, followingIds, user?.id ?? "")
+      : tab === "trending"
+      ? [...allPosts].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count))
+      : [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const videoPosts = tabFiltered?.filter((p) => p.video_url) ?? null;
+  const textPosts = tabFiltered?.filter((p) => !p.video_url) ?? null;
+  const posts = feedMode === "video" ? videoPosts : textPosts;
 
   return (
     <div className="px-4">
@@ -47,12 +65,9 @@ export function Home() {
           <IconBtn onClick={() => navigate("/explore")}>
             <Search className="h-5 w-5" />
           </IconBtn>
-          <IconBtn onClick={() => navigate("/chat")}>
-            <MessageCircle className="h-5 w-5" />
+          <IconBtn onClick={() => navigate("/notifications")} dot>
+            <Bell className="h-5 w-5" />
           </IconBtn>
-          <button onClick={() => navigate("/profile")} className="ml-1">
-            <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={32} />
-          </button>
         </div>
       </header>
 
@@ -75,33 +90,38 @@ export function Home() {
         ))}
       </div>
 
-      <button
-        onClick={() => navigate("/create/post")}
-        className="mb-4 flex w-full items-center gap-3 rounded-2xl glass-card px-4 py-3.5 text-left"
-      >
-        <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={34} />
-        <span className="text-[13.5px] text-mist">What's on your mind?</span>
-        <span className="ml-auto flex h-8 w-8 items-center justify-center rounded-full grad-primary">
-          <Plus className="h-4 w-4 text-white" />
-        </span>
-      </button>
+      <div className="no-scrollbar -mx-4 mb-4 flex gap-5 overflow-x-auto px-4">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`shrink-0 pb-1 text-[14px] font-semibold transition-colors ${
+              tab === t.id ? "text-ink" : "text-mist"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex gap-1.5 rounded-full chip p-1">
         <button
-          onClick={() => setTab("forYou")}
-          className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors ${
-            tab === "forYou" ? "grad-primary text-white" : "chip text-mist"
+          onClick={() => setFeedMode("video")}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12.5px] font-semibold transition-colors ${
+            feedMode === "video" ? "grad-primary text-white" : "text-mist"
           }`}
         >
-          For You
+          <Clapperboard className="h-3.5 w-3.5" />
+          Short Videos
         </button>
         <button
-          onClick={() => setTab("following")}
-          className={`rounded-full px-4 py-1.5 text-[12.5px] font-semibold transition-colors ${
-            tab === "following" ? "grad-primary text-white" : "chip text-mist"
+          onClick={() => setFeedMode("posts")}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12.5px] font-semibold transition-colors ${
+            feedMode === "posts" ? "grad-primary text-white" : "text-mist"
           }`}
         >
-          Following
+          <FileText className="h-3.5 w-3.5" />
+          Posts
         </button>
       </div>
 
@@ -112,17 +132,25 @@ export function Home() {
       ) : posts.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
           <p className="font-display text-sm font-semibold text-ink">
-            {tab === "following" ? "Follow people to see their posts here" : "Your feed is empty"}
+            {feedMode === "video"
+              ? "No short videos yet"
+              : tab === "following"
+              ? "Follow people to see their posts here"
+              : "Your feed is empty"}
           </p>
           <p className="max-w-[240px] text-[12.5px] text-mist">
-            {tab === "following" ? "Explore to find creators worth following." : "Be the first to share something with VYRO."}
+            {feedMode === "video"
+              ? "Videos people post will show up here."
+              : tab === "following"
+              ? "Explore to find creators worth following."
+              : "Be the first to share something with VYRO."}
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-4 pb-4">
-          {posts.map((p) => (
-            <PostCard key={p.id} post={p} />
-          ))}
+          {posts.map((p) =>
+            feedMode === "video" ? <ShortVideoCard key={p.id} post={p} /> : <PostCard key={p.id} post={p} />
+          )}
         </div>
       )}
     </div>

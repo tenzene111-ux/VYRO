@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, Search, Bell, User, Plus } from "lucide-react";
+import { Home, Search, MessageCircle, User, Plus } from "lucide-react";
 import clsx from "clsx";
 import { useUI } from "../context/UIContext";
 
@@ -8,7 +8,7 @@ const items = [
   { to: "/explore", label: "Explore", icon: Search },
 ];
 const itemsRight = [
-  { to: "/notifications", label: "Alerts", icon: Bell },
+  { to: "/chat", label: "Inbox", icon: MessageCircle },
   { to: "/profile", label: "Profile", icon: User },
 ];
 
