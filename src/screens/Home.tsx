@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, Bell, MessageCircle, Plus, Loader2 } from "lucide-react";
+import { Search, MessageCircle, Plus, Loader2 } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
@@ -49,9 +49,6 @@ export function Home() {
           </IconBtn>
           <IconBtn onClick={() => navigate("/chat")}>
             <MessageCircle className="h-5 w-5" />
-          </IconBtn>
-          <IconBtn onClick={() => navigate("/notifications")} dot>
-            <Bell className="h-5 w-5" />
           </IconBtn>
           <button onClick={() => navigate("/profile")} className="ml-1">
             <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={32} />
