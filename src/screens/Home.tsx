@@ -106,6 +106,10 @@ export function Home() {
       </div>
 
       <div className="mb-4 flex gap-1.5 rounded-full chip p-1">
+        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-full grad-primary py-2 text-[12.5px] font-semibold text-white">
+          <MessageSquare className="h-3.5 w-3.5" />
+          Posts
+        </button>
         <button
           onClick={handleOpenShortVideos}
           disabled={!videoPosts || videoPosts.length === 0}
@@ -113,10 +117,6 @@ export function Home() {
         >
           <Clapperboard className="h-3.5 w-3.5" />
           Short Videos
-        </button>
-        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-full grad-primary py-2 text-[12.5px] font-semibold text-white">
-          <MessageSquare className="h-3.5 w-3.5" />
-          Posts
         </button>
       </div>
 
