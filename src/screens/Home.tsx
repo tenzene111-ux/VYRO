@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, Bell, Plus, Loader2, Clapperboard, FileText } from "lucide-react";
+import { Search, Bell, MessageCircle, Plus, Loader2, Clapperboard, FileText } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
@@ -64,6 +64,9 @@ export function Home() {
         <div className="flex items-center gap-1">
           <IconBtn onClick={() => navigate("/explore")}>
             <Search className="h-5 w-5" />
+          </IconBtn>
+          <IconBtn onClick={() => navigate("/chat")}>
+            <MessageCircle className="h-5 w-5" />
           </IconBtn>
           <IconBtn onClick={() => navigate("/notifications")} dot>
             <Bell className="h-5 w-5" />
