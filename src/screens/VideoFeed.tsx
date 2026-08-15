@@ -110,6 +110,8 @@ function VideoTile({
   const [commentText, setCommentText] = useState("");
   const [posting, setPosting] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [burstHeart, setBurstHeart] = useState(false);
 
   const isOwn = user?.id === post.author.id;
 
@@ -145,6 +147,7 @@ function VideoTile({
     v.play().catch(() => {});
     const onTimeUpdate = () => {
       maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
+      setProgress(v.duration > 0 ? v.currentTime / v.duration : 0);
     };
     v.addEventListener("timeupdate", onTimeUpdate);
     return () => {
@@ -223,6 +226,12 @@ function VideoTile({
     }
   };
 
+  const handleDoubleTapLike = () => {
+    setBurstHeart(true);
+    setTimeout(() => setBurstHeart(false), 700);
+    if (!liked) handleLike();
+  };
+
   return (
     <div ref={tileRef} className="relative h-full w-full snap-start snap-always">
       <video
@@ -232,15 +241,26 @@ function VideoTile({
         loop
         playsInline
         onClick={handleTogglePlay}
+        onDoubleClick={handleDoubleTapLike}
         className="h-full w-full object-contain bg-black"
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 bg-white/15 safe-top">
+        <div className="h-full bg-white transition-[width]" style={{ width: `${Math.min(progress, 1) * 100}%` }} />
+      </div>
 
       {paused && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/40 backdrop-blur">
             <Play className="h-8 w-8 fill-white text-white" />
           </span>
+        </div>
+      )}
+
+      {burstHeart && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Heart className="h-24 w-24 animate-heart-burst fill-rose-500 text-rose-500 drop-shadow-lg" />
         </div>
       )}
 
@@ -305,7 +325,26 @@ function VideoTile({
             {post.remix_type === "duet" ? "🎬 Duet" : "✂️ Stitch"} · view original
           </button>
         )}
-        {post.text && <p className="text-[13px] leading-snug text-white/90">{post.text}</p>}
+        {post.text && (
+          <p className="text-[13px] leading-snug text-white/90">
+            {post.text.split(/(#[a-zA-Z][a-zA-Z0-9_]*)/g).map((part, i) =>
+              part.startsWith("#") ? (
+                <button
+                  key={i}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/explore?q=${encodeURIComponent(part)}`);
+                  }}
+                  className="font-semibold text-cyan-300"
+                >
+                  {part}
+                </button>
+              ) : (
+                <span key={i}>{part}</span>
+              )
+            )}
+          </p>
+        )}
       </div>
 
       {commentsOpen && (

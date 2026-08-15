@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, X, QrCode, MessageCircle, Flame, Music, Plane, Gamepad2, Trophy, Palette, Heart, Loader2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { gradientFor } from "../lib/gradients";
@@ -21,10 +21,11 @@ const categories = [
 export function Explore() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [topPosts, setTopPosts] = useState<FeedPost[]>([]);
   const [hashtags, setHashtags] = useState<TrendingHashtag[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [results, setResults] = useState<{ people: Profile[]; posts: FeedPost[] } | null>(null);
   const [searching, setSearching] = useState(false);
 
