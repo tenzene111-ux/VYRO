@@ -16,7 +16,7 @@ export function BottomNav() {
   const { setCreateOpen } = useUI();
 
   return (
-    <nav className="sticky inset-x-0 bottom-0 z-40 flex items-center justify-between border-t border-white/8 bg-surface px-2 py-2 safe-bottom">
+    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-[480px] items-center justify-between border-t border-white/8 bg-surface px-2 py-2 safe-bottom">
       {items.map((item) => (
         <NavItem key={item.to} {...item} />
       ))}

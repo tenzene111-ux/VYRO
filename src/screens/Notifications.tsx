@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageSquare, MessageCircle, UserPlus, Gift, Loader2, Bell, BellOff } from "lucide-react";
+import { Heart, MessageSquare, MessageCircle, UserPlus, Gift, Loader2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import { listNotifications, markAllNotificationsRead, subscribeToNotifications, type NotificationRow } from "../lib/api";
-import { isPushSupported, getExistingSubscription, enablePush, disablePush } from "../lib/push";
 
 const iconFor: Record<string, typeof Heart> = {
   like: Heart,
@@ -31,9 +30,6 @@ export function Notifications() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationRow[] | null>(null);
-  const [pushOn, setPushOn] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -45,55 +41,14 @@ export function Notifications() {
     return unsubscribe;
   }, [user]);
 
-  useEffect(() => {
-    getExistingSubscription().then((sub) => setPushOn(!!sub));
-  }, []);
-
-  const handleTogglePush = async () => {
-    if (!user || pushBusy) return;
-    setPushBusy(true);
-    setPushError(null);
-    try {
-      if (pushOn) {
-        await disablePush();
-        setPushOn(false);
-      } else {
-        const result = await enablePush(user.id);
-        if (result.ok) setPushOn(true);
-        else setPushError(result.error ?? "Couldn't enable notifications.");
-      }
-    } finally {
-      setPushBusy(false);
-    }
-  };
-
   return (
     <div className="safe-top">
       <header className="flex items-center justify-between px-4 py-4">
         <h1 className="font-display text-xl font-bold text-ink">Notifications</h1>
-        <div className="flex items-center gap-1.5">
-          {isPushSupported() && (
-            <button
-              onClick={handleTogglePush}
-              disabled={pushBusy}
-              className={`rounded-full p-2 disabled:opacity-50 ${pushOn ? "grad-primary text-white" : "chip text-mist"}`}
-              title={pushOn ? "Turn off push notifications" : "Turn on push notifications"}
-            >
-              {pushBusy ? (
-                <Loader2 className="h-4.5 w-4.5 animate-spin" />
-              ) : pushOn ? (
-                <Bell className="h-4.5 w-4.5" />
-              ) : (
-                <BellOff className="h-4.5 w-4.5" />
-              )}
-            </button>
-          )}
-          <button onClick={() => navigate("/chat")} className="rounded-full p-2 chip text-mist">
-            <MessageCircle className="h-4.5 w-4.5" />
-          </button>
-        </div>
+        <button onClick={() => navigate("/chat")} className="rounded-full p-2 chip text-mist">
+          <MessageCircle className="h-4.5 w-4.5" />
+        </button>
       </header>
-      {pushError && <p className="px-4 pb-2 text-[12px] text-rose-400">{pushError}</p>}
 
       {notifications === null ? (
         <div className="flex justify-center py-16">

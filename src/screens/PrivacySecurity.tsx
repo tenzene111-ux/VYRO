@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Fingerprint, Plus, Trash2, Loader2, ShieldCheck, Laptop, Smartphone } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, Fingerprint, Plus, Trash2, Loader2, ShieldCheck, Laptop, Smartphone } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { isPasskeySupported, listMyPasskeys, registerPasskey, deletePasskey, type Passkey } from "../lib/passkey";
+import { isPushSupported, getExistingSubscription, enablePush, disablePush } from "../lib/push";
 
 export function PrivacySecurity() {
   const navigate = useNavigate();
@@ -11,11 +12,36 @@ export function PrivacySecurity() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     listMyPasskeys(user.id).then(setPasskeys).catch(() => setPasskeys([]));
   }, [user]);
+
+  useEffect(() => {
+    getExistingSubscription().then((sub) => setPushOn(!!sub));
+  }, []);
+
+  const handleTogglePush = async () => {
+    if (!user || pushBusy) return;
+    setPushBusy(true);
+    setPushError(null);
+    try {
+      if (pushOn) {
+        await disablePush();
+        setPushOn(false);
+      } else {
+        const result = await enablePush(user.id);
+        if (result.ok) setPushOn(true);
+        else setPushError(result.error ?? "Couldn't enable notifications.");
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const handleAdd = async () => {
     if (!user || adding) return;
@@ -56,6 +82,30 @@ export function PrivacySecurity() {
           <p className="text-[12px] text-mist">Your direct messages are encrypted on your device. Manage them from any chat.</p>
         </div>
       </div>
+
+      {isPushSupported() && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl glass-card p-4">
+          {pushOn ? (
+            <Bell className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400" />
+          ) : (
+            <BellOff className="mt-0.5 h-5 w-5 shrink-0 text-mist" />
+          )}
+          <div className="flex-1">
+            <p className="text-[13px] font-semibold text-ink">Push notifications</p>
+            <p className="text-[12px] text-mist">Get notified about likes, comments, follows and gifts.</p>
+            {pushError && <p className="mt-1 text-[12px] text-rose-400">{pushError}</p>}
+          </div>
+          <button
+            onClick={handleTogglePush}
+            disabled={pushBusy}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-50 ${
+              pushOn ? "grad-primary text-white" : "chip text-mist"
+            }`}
+          >
+            {pushBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : pushOn ? "On" : "Off"}
+          </button>
+        </div>
+      )}
 
       <div className="mb-3 flex items-center justify-between">
         <p className="font-display text-sm font-semibold text-ink">Passkeys</p>
