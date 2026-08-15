@@ -5,14 +5,12 @@ import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
 import { useAuth, type Profile } from "../context/AuthContext";
-import { useUI } from "../context/UIContext";
 import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
 import { rankForYou, filterFollowing } from "../lib/ranking";
 
 export function Home() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  const { setCreateOpen } = useUI();
   const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<"forYou" | "following">("forYou");
@@ -86,15 +84,7 @@ export function Home() {
       >
         <Avatar name={profile?.name ?? "You"} avatarUrl={profile?.avatar_url} size={34} />
         <span className="text-[13.5px] text-mist">What's on your mind?</span>
-        <span
-          role="button"
-          aria-label="More ways to create"
-          onClick={(e) => {
-            e.stopPropagation();
-            setCreateOpen(true);
-          }}
-          className="ml-auto flex h-8 w-8 items-center justify-center rounded-full grad-primary"
-        >
+        <span className="ml-auto flex h-8 w-8 items-center justify-center rounded-full grad-primary">
           <Plus className="h-4 w-4 text-white" />
         </span>
       </button>
