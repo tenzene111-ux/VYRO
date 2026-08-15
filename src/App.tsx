@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { UIProvider } from "./context/UIContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CallProvider } from "./context/CallContext";
 import { Shell } from "./components/Shell";
@@ -40,6 +39,7 @@ const CommunityDetail = lazy(() => import("./screens/CommunityDetail").then((m) 
 const CreateCommunity = lazy(() => import("./screens/CreateCommunity").then((m) => ({ default: m.CreateCommunity })));
 const Rewards = lazy(() => import("./screens/Rewards").then((m) => ({ default: m.Rewards })));
 const Admin = lazy(() => import("./screens/Admin").then((m) => ({ default: m.Admin })));
+const Create = lazy(() => import("./screens/Create").then((m) => ({ default: m.Create })));
 const ShortsStudio = lazy(() => import("./screens/shorts/ShortsStudio").then((m) => ({ default: m.ShortsStudio })));
 const ShortsCamera = lazy(() => import("./screens/shorts/ShortsCamera").then((m) => ({ default: m.ShortsCamera })));
 const ShortsUpload = lazy(() => import("./screens/shorts/ShortsUpload").then((m) => ({ default: m.ShortsUpload })));
@@ -70,9 +70,8 @@ function RouteFallback() {
 export default function App() {
   return (
     <AuthProvider>
-      <UIProvider>
-        <BrowserRouter basename={import.meta.env.BASE_URL}>
-          <CallProvider>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <CallProvider>
             <IncomingCallOverlay />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
@@ -102,6 +101,7 @@ export default function App() {
                     <Route path="/community" element={<Community />} />
                     <Route path="/community/:id" element={<CommunityDetail />} />
                     <Route path="/rewards" element={<Rewards />} />
+                    <Route path="/create" element={<Create />} />
                   </Route>
 
                   <Route path="/chat" element={<ChatShell />}>
@@ -138,9 +138,8 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>
-          </CallProvider>
-        </BrowserRouter>
-      </UIProvider>
+        </CallProvider>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

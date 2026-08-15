@@ -1,6 +1,5 @@
 import { Outlet } from "react-router-dom";
 import { BottomNav } from "./BottomNav";
-import { CreateMenu } from "./CreateMenu";
 
 export function Shell() {
   return (
@@ -10,7 +9,6 @@ export function Shell() {
       </div>
 
       <BottomNav />
-      <CreateMenu />
     </div>
   );
 }
