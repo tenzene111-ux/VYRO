@@ -1848,3 +1848,91 @@ export async function listReferrals(userId: string): Promise<number> {
     .eq("referrer_id", userId);
   return count ?? 0;
 }
+
+// ---------- reports & admin ----------
+
+export type ReportTargetType = "post" | "user" | "comment" | "live_stream" | "marketplace_listing" | "community";
+
+export async function submitReport(params: {
+  reporterId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: string;
+  details?: string;
+}) {
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: params.reporterId,
+    target_type: params.targetType,
+    target_id: params.targetId,
+    reason: params.reason,
+    details: params.details ?? null,
+  });
+  if (error) throw error;
+}
+
+export type Report = Database["public"]["Tables"]["reports"]["Row"] & { reporter: Profile };
+
+export async function listPendingReports(): Promise<Report[]> {
+  const { data: reports, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!reports || reports.length === 0) return [];
+  const reporterIds = [...new Set(reports.map((r) => r.reporter_id))];
+  const { data: reporters } = await supabase.from("profiles").select("*").in("id", reporterIds);
+  const byId = new Map((reporters ?? []).map((p) => [p.id, p]));
+  return reports.flatMap((r) => {
+    const reporter = byId.get(r.reporter_id);
+    return reporter ? [{ ...r, reporter }] : [];
+  });
+}
+
+export async function resolveReport(reportId: string, status: "actioned" | "dismissed") {
+  const { error } = await supabase.rpc("admin_resolve_report", { p_report_id: reportId, p_status: status });
+  if (error) throw error;
+}
+
+export async function adminDeletePost(postId: string) {
+  const { error } = await supabase.rpc("admin_delete_post", { p_post_id: postId });
+  if (error) throw error;
+}
+
+export async function adminSetUserStatus(userId: string, status: "active" | "suspended" | "banned") {
+  const { error } = await supabase.rpc("admin_set_user_status", { p_user_id: userId, p_status: status });
+  if (error) throw error;
+}
+
+export async function adminSearchUsers(query: string): Promise<Profile[]> {
+  let req = supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(50);
+  if (query.trim()) req = req.or(`username.ilike.%${query}%,name.ilike.%${query}%`);
+  const { data, error } = await req;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type AdminDashboardCounts = {
+  totalUsers: number;
+  totalPosts: number;
+  totalVideos: number;
+  totalLiveStreams: number;
+  pendingReports: number;
+};
+
+export async function getAdminDashboardCounts(): Promise<AdminDashboardCounts> {
+  const [users, posts, videos, live, reports] = await Promise.all([
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    supabase.from("posts").select("id", { count: "exact", head: true }),
+    supabase.from("posts").select("id", { count: "exact", head: true }).not("video_url", "is", null),
+    supabase.from("live_sessions").select("id", { count: "exact", head: true }),
+    supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+  ]);
+  return {
+    totalUsers: users.count ?? 0,
+    totalPosts: posts.count ?? 0,
+    totalVideos: videos.count ?? 0,
+    totalLiveStreams: live.count ?? 0,
+    pendingReports: reports.count ?? 0,
+  };
+}

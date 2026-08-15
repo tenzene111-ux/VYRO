@@ -29,6 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (userId: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
+    if (data && data.status !== "active") {
+      await supabase.auth.signOut();
+      setProfile(null);
+      return;
+    }
     setProfile(data ?? null);
   };
 

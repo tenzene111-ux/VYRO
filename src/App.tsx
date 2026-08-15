@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { CallProvider } from "./context/CallContext";
 import { Shell } from "./components/Shell";
 import { RequireAuth } from "./components/RequireAuth";
+import { RequireAdmin } from "./components/RequireAdmin";
 import { IncomingCallOverlay } from "./components/IncomingCallOverlay";
 
 import { Splash } from "./screens/Splash";
@@ -38,6 +39,7 @@ const Community = lazy(() => import("./screens/Community").then((m) => ({ defaul
 const CommunityDetail = lazy(() => import("./screens/CommunityDetail").then((m) => ({ default: m.CommunityDetail })));
 const CreateCommunity = lazy(() => import("./screens/CreateCommunity").then((m) => ({ default: m.CreateCommunity })));
 const Rewards = lazy(() => import("./screens/Rewards").then((m) => ({ default: m.Rewards })));
+const Admin = lazy(() => import("./screens/Admin").then((m) => ({ default: m.Admin })));
 const ShortsStudio = lazy(() => import("./screens/shorts/ShortsStudio").then((m) => ({ default: m.ShortsStudio })));
 const ShortsCamera = lazy(() => import("./screens/shorts/ShortsCamera").then((m) => ({ default: m.ShortsCamera })));
 const ShortsUpload = lazy(() => import("./screens/shorts/ShortsUpload").then((m) => ({ default: m.ShortsUpload })));
@@ -130,6 +132,7 @@ export default function App() {
                   <Route path="/live/:id" element={<LiveRoom />} />
                   <Route path="/live/:id/replay" element={<LiveReplay />} />
                   <Route path="/watch/:postId" element={<VideoFeed />} />
+                  <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

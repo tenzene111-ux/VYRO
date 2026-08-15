@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User, Lock, Bell, Shield, Database, HelpCircle, ChevronRight, Moon, Sun, Monitor, Wallet, Sparkles,
-  LogOut, EyeOff, Fingerprint, Users2, Gift,
+  LogOut, EyeOff, Fingerprint, Users2, Gift, ShieldCheck,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../context/AuthContext";
@@ -58,6 +58,12 @@ export function ChatSettingsTab() {
         <ToggleRow icon={Fingerprint} label="Biometric lock" value={biometric} onChange={setBiometric} />
         <Row icon={Shield} label="Two-factor authentication" onClick={() => {}} />
       </SettingsGroup>
+
+      {profile?.is_admin && (
+        <SettingsGroup title="Admin">
+          <Row icon={ShieldCheck} label="Admin Dashboard" onClick={() => navigate("/admin")} />
+        </SettingsGroup>
+      )}
 
       <SettingsGroup title="Support">
         <Row icon={Database} label="Data & storage" onClick={() => {}} />

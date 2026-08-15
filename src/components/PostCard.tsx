@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play, Bookmark } from "lucide-react";
 import { Avatar } from "./Avatar";
+import { ReportModal } from "./ReportModal";
 import { useAuth } from "../context/AuthContext";
 import { addComment, listComments, toggleLike, toggleSavePost, type Comment, type FeedPost } from "../lib/api";
 
@@ -16,6 +17,8 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentText, setCommentText] = useState("");
   const [posting, setPosting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const handleLike = async () => {
     if (!user) return;
@@ -85,9 +88,30 @@ export function PostCard({ post }: { post: FeedPost }) {
             )}
           </p>
         </div>
-        <button className="rounded-full p-1.5 text-mist hover:bg-white/5 hover:text-ink">
-          <MoreHorizontal className="h-4.5 w-4.5" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="rounded-full p-1.5 text-mist hover:bg-white/5 hover:text-ink"
+          >
+            <MoreHorizontal className="h-4.5 w-4.5" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-2xl glass-strong py-1">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setReportOpen(true);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-[13px] font-medium text-rose-400 hover:bg-white/5"
+                >
+                  Report post
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {post.text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>}
@@ -178,6 +202,8 @@ export function PostCard({ post }: { post: FeedPost }) {
           </div>
         </div>
       )}
+
+      {reportOpen && <ReportModal targetType="post" targetId={post.id} onClose={() => setReportOpen(false)} />}
     </article>
   );
 }

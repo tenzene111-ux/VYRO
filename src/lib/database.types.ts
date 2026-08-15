@@ -15,6 +15,8 @@ export type Database = {
           avatar_url: string | null;
           public_key_jwk: Json | null;
           referred_by: string | null;
+          is_admin: boolean;
+          status: string;
           created_at: string;
         };
         Insert: {
@@ -28,6 +30,8 @@ export type Database = {
           avatar_url?: string | null;
           public_key_jwk?: Json | null;
           referred_by?: string | null;
+          is_admin?: boolean;
+          status?: string;
           created_at?: string;
         };
         Update: {
@@ -41,6 +45,8 @@ export type Database = {
           avatar_url?: string | null;
           public_key_jwk?: Json | null;
           referred_by?: string | null;
+          is_admin?: boolean;
+          status?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -188,6 +194,45 @@ export type Database = {
           id?: string;
           referrer_id?: string;
           referred_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      reports: {
+        Row: {
+          id: string;
+          reporter_id: string;
+          target_type: string;
+          target_id: string;
+          reason: string;
+          details: string | null;
+          status: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          reporter_id: string;
+          target_type: string;
+          target_id: string;
+          reason: string;
+          details?: string | null;
+          status?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          reporter_id?: string;
+          target_type?: string;
+          target_id?: string;
+          reason?: string;
+          details?: string | null;
+          status?: string;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -1047,6 +1092,22 @@ export type Database = {
       claim_daily_checkin: {
         Args: Record<string, never>;
         Returns: { streak: number; reward: number }[];
+      };
+      is_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      admin_resolve_report: {
+        Args: { p_report_id: string; p_status: string };
+        Returns: undefined;
+      };
+      admin_delete_post: {
+        Args: { p_post_id: string };
+        Returns: undefined;
+      };
+      admin_set_user_status: {
+        Args: { p_user_id: string; p_status: string };
+        Returns: undefined;
       };
       get_match_score: {
         Args: { p_match_id: string };
