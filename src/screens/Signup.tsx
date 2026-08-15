@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { User, AtSign, Mail, Lock, Loader2, CheckCircle2 } from "lucide-react";
 import { Logo, LogoMark } from "../components/Logo";
+import { BhutanSkyline } from "../components/BhutanSkyline";
 import { useAuth } from "../context/AuthContext";
 
 export function Signup() {
@@ -80,7 +81,8 @@ export function Signup() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-y-auto bg-vyro-radial px-6 safe-top">
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-y-auto px-6 safe-top">
+      <BhutanSkyline />
       <div className="flex flex-col items-center pb-6 pt-8">
         <LogoMark size={44} />
         <Logo size={18} />

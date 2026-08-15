@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { LogoMark } from "../components/Logo";
+import { BhutanSkyline } from "../components/BhutanSkyline";
 import { useAuth } from "../context/AuthContext";
 
 export function Splash() {
@@ -21,7 +22,8 @@ export function Splash() {
   }, [loading, session, navigate]);
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center bg-vyro-radial">
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center">
+      <BhutanSkyline />
       <motion.div
         initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
         animate={{ opacity: 1, scale: 1, rotate: 0 }}
@@ -42,14 +44,15 @@ export function Splash() {
       </motion.h1>
 
       {showTag && (
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mt-2 text-[13px] font-medium text-mist"
+          className="mt-2 flex flex-col items-center gap-0.5"
         >
-          Your World. Your People. Your Voice.
-        </motion.p>
+          <p className="text-[13px] font-semibold text-ink">Create • Share • Earn</p>
+          <p className="text-[11.5px] text-mist">The Next Gen Bhutanese Social &amp; Video App</p>
+        </motion.div>
       )}
     </div>
   );
