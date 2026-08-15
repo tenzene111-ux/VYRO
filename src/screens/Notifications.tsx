@@ -63,37 +63,64 @@ export function Notifications() {
         </div>
       ) : (
         <div className="flex flex-col px-3 py-2">
-          {notifications.map((n) => {
-            const Icon = iconFor[n.type] ?? Heart;
+          {(() => {
+            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+            const fresh = notifications.filter((n) => new Date(n.created_at).getTime() >= cutoff);
+            const earlier = notifications.filter((n) => new Date(n.created_at).getTime() < cutoff);
             return (
-              <button
-                key={n.id}
-                onClick={() => n.actor && navigate(`/profile/${n.actor.id}`)}
-                className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.03] ${
-                  !n.read ? "bg-violet-500/[0.06]" : ""
-                }`}
-              >
-                <div className="relative shrink-0">
-                  <Avatar name={n.actor?.name ?? "VYRO"} avatarUrl={n.actor?.avatar_url} size={44} />
-                  <span
-                    className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface ${colorFor[n.type] ?? "text-mist"}`}
-                  >
-                    <Icon className="h-3 w-3" />
-                  </span>
-                </div>
-                <p className="flex-1 text-[13px] leading-snug text-ink/90">
-                  <span className="font-semibold text-ink">{n.actor?.name ?? "Someone"} </span>
-                  {textFor[n.type] ?? "sent you a notification"}
-                </p>
-                <div className="flex flex-col items-end gap-1.5">
-                  <span className="text-[11px] text-mist">{timeAgo(n.created_at)}</span>
-                  {!n.read && <span className="h-2 w-2 rounded-full bg-cyan-400" />}
-                </div>
-              </button>
+              <>
+                {fresh.length > 0 && <NotificationGroup label="New" items={fresh} onOpen={navigate} />}
+                {earlier.length > 0 && <NotificationGroup label="Earlier" items={earlier} onOpen={navigate} />}
+              </>
             );
-          })}
+          })()}
         </div>
       )}
+    </div>
+  );
+}
+
+function NotificationGroup({
+  label,
+  items,
+  onOpen,
+}: {
+  label: string;
+  items: NotificationRow[];
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <div className="mb-2">
+      <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-mist">{label}</p>
+      {items.map((n) => {
+        const Icon = iconFor[n.type] ?? Heart;
+        return (
+          <button
+            key={n.id}
+            onClick={() => n.actor && onOpen(`/profile/${n.actor.id}`)}
+            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.03] ${
+              !n.read ? "bg-violet-500/[0.06]" : ""
+            }`}
+          >
+            <div className="relative shrink-0">
+              <Avatar name={n.actor?.name ?? "VYRO"} avatarUrl={n.actor?.avatar_url} size={44} />
+              <span
+                className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface ${colorFor[n.type] ?? "text-mist"}`}
+              >
+                <Icon className="h-3 w-3" />
+              </span>
+            </div>
+            <p className="flex-1 text-[13px] leading-snug text-ink/90">
+              <span className="font-semibold text-ink">{n.actor?.name ?? "Someone"} </span>
+              {textFor[n.type] ?? "sent you a notification"}
+            </p>
+            <div className="flex flex-col items-end gap-1.5">
+              <span className="text-[11px] text-mist">{timeAgo(n.created_at)}</span>
+              {!n.read && <span className="h-2 w-2 rounded-full bg-cyan-400" />}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

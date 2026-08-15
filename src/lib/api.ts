@@ -1936,3 +1936,97 @@ export async function getAdminDashboardCounts(): Promise<AdminDashboardCounts> {
     pendingReports: reports.count ?? 0,
   };
 }
+
+// ---------- inbox: comments & mentions ----------
+
+export type CommentActivity = {
+  id: string;
+  text: string;
+  created_at: string;
+  post_id: string;
+  post_text: string;
+  author: Profile;
+};
+
+export async function listCommentsOnMyPosts(userId: string): Promise<CommentActivity[]> {
+  const { data: myPosts } = await supabase.from("posts").select("id, text").eq("author_id", userId);
+  const postIds = (myPosts ?? []).map((p) => p.id);
+  if (postIds.length === 0) return [];
+  const postTextById = new Map((myPosts ?? []).map((p) => [p.id, p.text]));
+
+  const { data: comments, error } = await supabase
+    .from("post_comments")
+    .select("id, text, created_at, post_id, author_id")
+    .in("post_id", postIds)
+    .neq("author_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  if (!comments || comments.length === 0) return [];
+
+  const authorIds = [...new Set(comments.map((c) => c.author_id))];
+  const { data: authors } = await supabase.from("profiles").select("*").in("id", authorIds);
+  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
+
+  return comments.flatMap((c) => {
+    const author = authorById.get(c.author_id);
+    return author
+      ? [{ id: c.id, text: c.text, created_at: c.created_at, post_id: c.post_id, post_text: postTextById.get(c.post_id) ?? "", author }]
+      : [];
+  });
+}
+
+export type MentionActivity = {
+  id: string;
+  kind: "post" | "comment";
+  text: string;
+  created_at: string;
+  post_id: string;
+  author: Profile;
+};
+
+export async function listMentionsOf(username: string, userId: string): Promise<MentionActivity[]> {
+  const pattern = `%@${username}%`;
+  const [{ data: posts }, { data: comments }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("id, text, created_at, author_id")
+      .ilike("text", pattern)
+      .neq("author_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("post_comments")
+      .select("id, text, created_at, post_id, author_id")
+      .ilike("text", pattern)
+      .neq("author_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ]);
+
+  const authorIds = [...new Set([...(posts ?? []).map((p) => p.author_id), ...(comments ?? []).map((c) => c.author_id)])];
+  const { data: authors } = authorIds.length > 0 ? await supabase.from("profiles").select("*").in("id", authorIds) : { data: [] };
+  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
+
+  const postItems: MentionActivity[] = (posts ?? []).flatMap((p) => {
+    const author = authorById.get(p.author_id);
+    return author ? [{ id: p.id, kind: "post" as const, text: p.text, created_at: p.created_at, post_id: p.id, author }] : [];
+  });
+  const commentItems: MentionActivity[] = (comments ?? []).flatMap((c) => {
+    const author = authorById.get(c.author_id);
+    return author ? [{ id: c.id, kind: "comment" as const, text: c.text, created_at: c.created_at, post_id: c.post_id, author }] : [];
+  });
+
+  return [...postItems, ...commentItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function getTodayRewardedWatchCount(userId: string): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { count } = await supabase
+    .from("video_watch_events")
+    .select("id", { count: "exact", head: true })
+    .eq("viewer_id", userId)
+    .eq("completed", true)
+    .gte("created_at", `${today}T00:00:00Z`);
+  return Math.min(count ?? 0, 5);
+}

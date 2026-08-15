@@ -137,7 +137,7 @@ begin
     where user_id = auth.uid() and checkin_date = (now()::date - 1);
 
   v_new_streak := coalesce(v_prev_streak, 0) + 1;
-  v_reward := least(10 + (v_new_streak - 1) * 5, 40);
+  v_reward := 10;
 
   insert into public.daily_checkins (user_id, checkin_date, streak_count, reward_coins)
     values (auth.uid(), now()::date, v_new_streak, v_reward);
@@ -231,8 +231,8 @@ begin
   select count(*) into today_count from public.posts
     where author_id = new.author_id and created_at::date = now()::date;
   if today_count <= 3 then
-    update public.profiles set coins = coins + 5 where id = new.author_id;
-    insert into public.coin_transactions (user_id, delta, reason) values (new.author_id, 5, 'reward:create_post');
+    update public.profiles set coins = coins + 20 where id = new.author_id;
+    insert into public.coin_transactions (user_id, delta, reason) values (new.author_id, 20, 'reward:create_post');
   end if;
   return new;
 end;
@@ -243,7 +243,7 @@ create trigger on_post_created_reward
   after insert on public.posts
   for each row execute procedure public.reward_post_creation();
 
--- Reward completed video watches (capped at the first 10 per day).
+-- Reward completed video watches (capped at the first 5 per day).
 create or replace function public.reward_video_watch()
 returns trigger
 language plpgsql
@@ -257,9 +257,9 @@ begin
   end if;
   select count(*) into today_count from public.video_watch_events
     where viewer_id = new.viewer_id and completed = true and created_at::date = now()::date;
-  if today_count <= 10 then
-    update public.profiles set coins = coins + 2 where id = new.viewer_id;
-    insert into public.coin_transactions (user_id, delta, reason) values (new.viewer_id, 2, 'reward:watch_video');
+  if today_count <= 5 then
+    update public.profiles set coins = coins + 5 where id = new.viewer_id;
+    insert into public.coin_transactions (user_id, delta, reason) values (new.viewer_id, 5, 'reward:watch_video');
   end if;
   return new;
 end;
