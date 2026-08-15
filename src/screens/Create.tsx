@@ -1,12 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { FileText, Clapperboard, Radio, Video, ChevronRight } from "lucide-react";
+import { FileText, Camera, Clapperboard, Radio, Users, CalendarPlus, Tag, ChevronRight } from "lucide-react";
 import { gradientFor } from "../lib/gradients";
 
 const options = [
-  { label: "Short Video", desc: "Camera, effects, music", icon: Clapperboard, to: "/create/reel", grad: "from-orange-400 to-pink-500" },
   { label: "Post", desc: "Text, photo, poll or link", icon: FileText, to: "/create/post", grad: "from-cyan-400 to-blue-500" },
-  { label: "Live Streaming", desc: "Go live to your followers", icon: Radio, to: "/live/go", grad: "from-red-500 to-rose-500" },
-  { label: "Go Live", desc: "Start streaming now", icon: Video, to: "/live/go", grad: "from-violet-400 to-indigo-500" },
+  { label: "Story", desc: "Photo, video or text", icon: Camera, to: "/create/story", grad: "from-fuchsia-400 to-purple-500" },
+  { label: "Short Video", desc: "Camera, effects, music", icon: Clapperboard, to: "/create/reel", grad: "from-orange-400 to-pink-500" },
+  { label: "Go Live", desc: "Stream to the world", icon: Radio, to: "/live/go", grad: "from-red-500 to-rose-500" },
+  { label: "Group", desc: "Start a community", icon: Users, to: "/create/group", grad: "from-emerald-400 to-cyan-500" },
+  { label: "Event", desc: "Date, place, invites", icon: CalendarPlus, to: "/create/event", grad: "from-violet-400 to-indigo-500" },
+  { label: "Sell", desc: "List on Marketplace", icon: Tag, to: "/create/sell", grad: "from-amber-400 to-orange-500" },
 ];
 
 const templateCategories = ["Trending", "Popular", "Bhutan", "Saved", "Cinematic", "Comedy", "Travel"];
