@@ -52,25 +52,42 @@ export function GiftPicker({
 
         {error && <p className="mb-3 text-[12.5px] text-rose-400">{error}</p>}
 
-        <div className="grid grid-cols-3 gap-2.5">
-          {giftCatalog.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => handleSend(g.id, g.price, g.emoji)}
-              disabled={sendingId !== null}
-              className="flex flex-col items-center gap-1 rounded-2xl glass-card p-3 disabled:opacity-50"
-            >
-              {sendingId === g.id ? (
-                <Loader2 className="h-6 w-6 animate-spin text-mist" />
-              ) : (
-                <span className="text-2xl">{g.emoji}</span>
-              )}
-              <span className="text-[11px] font-medium text-ink">{g.name}</span>
-              <span className="text-[10px] text-amber-300">🪙 {g.price}</span>
-            </button>
-          ))}
+        <div className="max-h-[52vh] overflow-y-auto pr-0.5">
+          {tiers.map(({ label, rarities }) => {
+            const items = giftCatalog.filter((g) => rarities.includes(g.rarity));
+            if (items.length === 0) return null;
+            return (
+              <div key={label} className="mb-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-mist">{label}</p>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {items.map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => handleSend(g.id, g.price, g.emoji)}
+                      disabled={sendingId !== null}
+                      className="flex flex-col items-center gap-1 rounded-2xl glass-card p-3 disabled:opacity-50"
+                    >
+                      {sendingId === g.id ? (
+                        <Loader2 className="h-6 w-6 animate-spin text-mist" />
+                      ) : (
+                        <span className="text-2xl">{g.emoji}</span>
+                      )}
+                      <span className="text-[11px] font-medium text-ink">{g.name}</span>
+                      <span className="text-[10px] text-amber-300">🪙 {g.price}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+const tiers = [
+  { label: "Everyday", rarities: ["Common"] },
+  { label: "Popular", rarities: ["Rare", "Epic"] },
+  { label: "Premium", rarities: ["Legendary"] },
+];

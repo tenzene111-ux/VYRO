@@ -312,10 +312,21 @@ export const exploreCategories = [
 ];
 
 export const giftCatalog = [
-  { id: "gi1", name: "Heart", price: 1, emoji: "❤️", rarity: "Common" },
-  { id: "gi2", name: "Rose Bouquet", price: 10, emoji: "💐", rarity: "Common" },
-  { id: "gi3", name: "Snow Lion", price: 250, emoji: "🦁", rarity: "Rare" },
-  { id: "gi4", name: "Prayer Flags", price: 500, emoji: "🎏", rarity: "Rare" },
-  { id: "gi5", name: "Golden Dragon", price: 2000, emoji: "🐉", rarity: "Epic" },
+  // Everyday
+  { id: "gi1", name: "Blue Poppy", price: 5, emoji: "🌸", rarity: "Common" },
+  { id: "gi2", name: "Butter Lamp", price: 10, emoji: "🪔", rarity: "Common" },
+  { id: "gi7", name: "Prayer Wheel", price: 15, emoji: "☸️", rarity: "Common" },
+  { id: "gi4", name: "Prayer Flag", price: 20, emoji: "🎏", rarity: "Common" },
+  { id: "gi8", name: "Khadar", price: 25, emoji: "🧣", rarity: "Common" },
+  { id: "gi9", name: "Happiness Bell", price: 30, emoji: "🔔", rarity: "Common" },
+  { id: "gi10", name: "Lucky Knot", price: 40, emoji: "♾️", rarity: "Common" },
+  // Popular
+  { id: "gi11", name: "Bamboo Arrow", price: 100, emoji: "🏹", rarity: "Rare" },
+  { id: "gi12", name: "Golden Bow", price: 250, emoji: "🎯", rarity: "Rare" },
+  { id: "gi3", name: "Yak Caravan", price: 400, emoji: "🐃", rarity: "Rare" },
+  { id: "gi13", name: "Takin Spirit", price: 600, emoji: "🐐", rarity: "Rare" },
+  { id: "gi14", name: "Raven Guardian", price: 1500, emoji: "🐦‍⬛", rarity: "Epic" },
+  // Premium
+  { id: "gi5", name: "Thunder Dragon", price: 5000, emoji: "🐉", rarity: "Legendary" },
   { id: "gi6", name: "VYRO Crown", price: 10000, emoji: "👑", rarity: "Legendary" },
 ];
