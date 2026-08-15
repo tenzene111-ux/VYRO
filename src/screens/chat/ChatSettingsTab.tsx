@@ -2,11 +2,27 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User, Lock, Bell, Shield, Database, HelpCircle, ChevronRight, Moon, Sun, Monitor, Wallet, Sparkles,
-  LogOut, EyeOff, Fingerprint, Users2, Gift, ShieldCheck,
+  LogOut, EyeOff, Fingerprint, Users2, Gift, ShieldCheck, Languages, FileText, BookOpen, Info,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { InfoSheet } from "../../components/InfoSheet";
 import { useAuth } from "../../context/AuthContext";
 import { getStoredTheme, setTheme, type ThemeMode } from "../../lib/theme";
+
+const infoContent = {
+  terms: {
+    title: "Terms & Conditions",
+    body: "By using VYRO you agree to treat other members with respect, own the rights to what you post, and follow local law. VYRO Coins are a virtual item with no cash-out value outside features explicitly built for that. We can remove content or suspend accounts that violate our Community Guidelines.",
+  },
+  guidelines: {
+    title: "Community Guidelines",
+    body: "VYRO is built for Bhutan's creators and their communities. Be kind. No harassment, hate speech, nudity, scams, or dangerous content. Give credit for sounds and remixes. Report anything that breaks these rules using the Report option on any post, video, or profile.",
+  },
+  about: {
+    title: "About VYRO",
+    body: "VYRO — Create • Share • Earn. The Next Gen Bhutanese Social & Video App. Built for short videos, posts, live streaming, and a creator economy rooted in Bhutanese culture, from Thimphu to the world.",
+  },
+};
 
 export function ChatSettingsTab() {
   const navigate = useNavigate();
@@ -14,6 +30,15 @@ export function ChatSettingsTab() {
   const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme());
   const [readReceipts, setReadReceipts] = useState(true);
   const [biometric, setBiometric] = useState(true);
+  const [language, setLanguage] = useState<"en" | "dz">(
+    (localStorage.getItem("vyro_language") as "en" | "dz") ?? "en"
+  );
+  const [openSheet, setOpenSheet] = useState<keyof typeof infoContent | null>(null);
+
+  const handleLanguageChange = (lang: "en" | "dz") => {
+    setLanguage(lang);
+    localStorage.setItem("vyro_language", lang);
+  };
 
   const handleThemeChange = (mode: ThemeMode) => {
     setThemeState(mode);
@@ -50,6 +75,7 @@ export function ChatSettingsTab() {
       <SettingsGroup title="Preferences">
         <ThemeRow value={theme} onChange={handleThemeChange} />
         <Row icon={Bell} label="Notifications" onClick={() => {}} />
+        <LanguageRow value={language} onChange={handleLanguageChange} />
       </SettingsGroup>
 
       <SettingsGroup title="Privacy & Security">
@@ -70,12 +96,44 @@ export function ChatSettingsTab() {
         <Row icon={HelpCircle} label="Help center" onClick={() => {}} />
       </SettingsGroup>
 
+      <SettingsGroup title="More">
+        <Row icon={FileText} label="Terms & Conditions" onClick={() => setOpenSheet("terms")} />
+        <Row icon={BookOpen} label="Community Guidelines" onClick={() => setOpenSheet("guidelines")} />
+        <Row icon={Info} label="About VYRO" onClick={() => setOpenSheet("about")} />
+      </SettingsGroup>
+
       <button
         onClick={handleLogout}
         className="mb-8 mt-2 flex w-full items-center justify-center gap-2 rounded-2xl chip py-3 text-sm font-semibold text-rose-400"
       >
         <LogOut className="h-4.5 w-4.5" /> Log Out
       </button>
+
+      {openSheet && (
+        <InfoSheet title={infoContent[openSheet].title} body={infoContent[openSheet].body} onClose={() => setOpenSheet(null)} />
+      )}
+    </div>
+  );
+}
+
+function LanguageRow({ value, onChange }: { value: "en" | "dz"; onChange: (v: "en" | "dz") => void }) {
+  return (
+    <div className="flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 last:border-b-0">
+      <Languages className="h-4.5 w-4.5 text-violet-300" />
+      <span className="flex-1 text-[13.5px] text-ink">Language</span>
+      <div className="flex gap-1 rounded-full chip p-0.5">
+        {(["en", "dz"] as const).map((lang) => (
+          <button
+            key={lang}
+            onClick={() => onChange(lang)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              value === lang ? "grad-purple-blue text-white" : "text-mist"
+            }`}
+          >
+            {lang === "en" ? "English" : "Dzongkha"}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
