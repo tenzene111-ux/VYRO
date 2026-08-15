@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Pencil, Grid3x3, Clapperboard, Bookmark, Repeat2, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2,
+  Pencil, Grid3x3, Clapperboard, Bookmark, Heart, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2,
 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { GiftPicker } from "../components/GiftPicker";
@@ -9,15 +9,15 @@ import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
 import {
   countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
-  listPostsByAuthor, listSavedPosts, toggleFollow, updateProfile, type SimplePost, type FeedPost,
+  listPostsByAuthor, listSavedPosts, listLikedPosts, toggleFollow, updateProfile, type SimplePost, type FeedPost,
 } from "../lib/api";
 import { uploadImage } from "../lib/storage";
 
 const tabs = [
-  { id: "posts", icon: Grid3x3 },
   { id: "videos", icon: Clapperboard },
+  { id: "posts", icon: Grid3x3 },
   { id: "saved", icon: Bookmark },
-  { id: "reposts", icon: Repeat2 },
+  { id: "liked", icon: Heart },
 ];
 
 type ThumbPost = { id: string; text: string; image_url: string | null; video_url: string | null; cover_url: string | null };
@@ -58,6 +58,7 @@ export function Profile() {
   const [viewedProfile, setViewedProfile] = useState<ProfileRow | null>(isMe ? myProfile : null);
   const [posts, setPosts] = useState<SimplePost[]>([]);
   const [savedPosts, setSavedPosts] = useState<FeedPost[] | null>(null);
+  const [likedPosts, setLikedPosts] = useState<FeedPost[] | null>(null);
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
   const [tab, setTab] = useState("posts");
@@ -86,7 +87,12 @@ export function Profile() {
     listSavedPosts(user.id).then(setSavedPosts).catch(() => setSavedPosts([]));
   }, [tab, isMe, user, savedPosts]);
 
-  const visibleTabs = isMe ? tabs : tabs.filter((t) => t.id !== "saved");
+  useEffect(() => {
+    if (tab !== "liked" || !isMe || !user || likedPosts !== null) return;
+    listLikedPosts(user.id).then(setLikedPosts).catch(() => setLikedPosts([]));
+  }, [tab, isMe, user, likedPosts]);
+
+  const visibleTabs = isMe ? tabs : tabs.filter((t) => t.id !== "saved" && t.id !== "liked");
   const videoPosts = posts.filter((p) => p.video_url);
 
   const handleToggleFollow = async () => {
@@ -246,7 +252,20 @@ export function Profile() {
           </div>
         ))}
 
-      {tab === "reposts" && <p className="py-10 text-center text-[13px] text-mist">Nothing here yet.</p>}
+      {tab === "liked" &&
+        (likedPosts === null ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-mist" />
+          </div>
+        ) : likedPosts.length === 0 ? (
+          <p className="py-10 text-center text-[13px] text-mist">No liked posts yet.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-0.5 px-0.5 pt-0.5">
+            {likedPosts.map((p) => (
+              <PostThumb key={p.id} p={p} />
+            ))}
+          </div>
+        ))}
 
       {editing && isMe && myProfile && (
         <EditProfileModal
