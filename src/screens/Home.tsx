@@ -4,7 +4,6 @@ import { Search, Bell, Plus, Loader2, Clapperboard, MessageSquare, Pencil } from
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
-import { ShortVideoCard } from "../components/ShortVideoCard";
 import { useAuth, type Profile } from "../context/AuthContext";
 import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
 import { rankForYou, filterFollowing } from "../lib/ranking";
@@ -23,7 +22,6 @@ export function Home() {
   const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>("forYou");
-  const [feedMode, setFeedMode] = useState<"video" | "posts">("video");
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
 
   useEffect(() => {
@@ -54,8 +52,11 @@ export function Home() {
       : [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const videoPosts = tabFiltered?.filter((p) => p.video_url) ?? null;
-  const textPosts = tabFiltered?.filter((p) => !p.video_url) ?? null;
-  const posts = feedMode === "video" ? videoPosts : textPosts;
+  const posts = tabFiltered?.filter((p) => !p.video_url) ?? null;
+
+  const handleOpenShortVideos = () => {
+    if (videoPosts && videoPosts.length > 0) navigate(`/watch/${videoPosts[0].id}`);
+  };
 
   return (
     <div className="px-4">
@@ -106,20 +107,14 @@ export function Home() {
 
       <div className="mb-4 flex gap-1.5 rounded-full chip p-1">
         <button
-          onClick={() => setFeedMode("video")}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12.5px] font-semibold transition-colors ${
-            feedMode === "video" ? "grad-primary text-white" : "text-mist"
-          }`}
+          onClick={handleOpenShortVideos}
+          disabled={!videoPosts || videoPosts.length === 0}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12.5px] font-semibold text-mist transition-colors disabled:opacity-40"
         >
           <Clapperboard className="h-3.5 w-3.5" />
           Short Videos
         </button>
-        <button
-          onClick={() => setFeedMode("posts")}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12.5px] font-semibold transition-colors ${
-            feedMode === "posts" ? "grad-primary text-white" : "text-mist"
-          }`}
-        >
+        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-full grad-primary py-2 text-[12.5px] font-semibold text-white">
           <MessageSquare className="h-3.5 w-3.5" />
           Posts
         </button>
@@ -133,38 +128,28 @@ export function Home() {
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <p className="font-display text-sm font-semibold text-ink">
-              {feedMode === "video"
-                ? "No short videos yet"
-                : tab === "following"
-                ? "Follow people to see their posts here"
-                : "Your feed is empty"}
+              {tab === "following" ? "Follow people to see their posts here" : "Your feed is empty"}
             </p>
             <p className="max-w-[240px] text-[12.5px] text-mist">
-              {feedMode === "video"
-                ? "Videos people post will show up here."
-                : tab === "following"
-                ? "Explore to find creators worth following."
-                : "Be the first to share something with VYRO."}
+              {tab === "following" ? "Explore to find creators worth following." : "Be the first to share something with VYRO."}
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-4 pb-4">
-            {posts.map((p) =>
-              feedMode === "video" ? <ShortVideoCard key={p.id} post={p} /> : <PostCard key={p.id} post={p} />
-            )}
+            {posts.map((p) => (
+              <PostCard key={p.id} post={p} />
+            ))}
           </div>
         )}
 
-        {feedMode === "posts" && (
-          <button
-            onClick={() => navigate("/create/post")}
-            className="fixed bottom-24 right-4 z-30 mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-full grad-primary text-white shadow-lg glow-violet active:scale-95 transition-transform"
-            style={{ right: "max(1rem, calc((100vw - 480px) / 2 + 1rem))" }}
-            aria-label="New post"
-          >
-            <Pencil className="h-5 w-5" />
-          </button>
-        )}
+        <button
+          onClick={() => navigate("/create/post")}
+          className="fixed bottom-24 right-4 z-30 mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-full grad-primary text-white shadow-lg glow-violet active:scale-95 transition-transform"
+          style={{ right: "max(1rem, calc((100vw - 480px) / 2 + 1rem))" }}
+          aria-label="New post"
+        >
+          <Pencil className="h-5 w-5" />
+        </button>
       </div>
     </div>
   );
