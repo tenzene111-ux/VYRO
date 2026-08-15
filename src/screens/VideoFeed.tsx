@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Volume2, VolumeX, Radio, Bookmark, Users, Scissors } from "lucide-react";
+import { ArrowLeft, Heart, MessageSquare, Share2, Send, Loader2, Play, Radio, Bookmark, Users, Scissors } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -25,7 +25,6 @@ export function VideoFeed() {
   const [posts, setPosts] = useState<FeedPost[] | null>(null);
   const [liveSessions, setLiveSessions] = useState<LiveSessionWithHost[]>([]);
   const [activeId, setActiveId] = useState<string | null>(postId ?? null);
-  const [globalMuted, setGlobalMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrolledRef = useRef(false);
 
@@ -59,14 +58,7 @@ export function VideoFeed() {
           </div>
         ) : (
           posts.map((p) => (
-            <VideoTile
-              key={p.id}
-              post={p}
-              active={p.id === activeId}
-              muted={globalMuted}
-              onMutedChange={setGlobalMuted}
-              onActive={() => setActiveId(p.id)}
-            />
+            <VideoTile key={p.id} post={p} active={p.id === activeId} onActive={() => setActiveId(p.id)} />
           ))
         )}
       </div>
@@ -97,14 +89,10 @@ export function VideoFeed() {
 function VideoTile({
   post,
   active,
-  muted,
-  onMutedChange,
   onActive,
 }: {
   post: FeedPost;
   active: boolean;
-  muted: boolean;
-  onMutedChange: (m: boolean) => void;
   onActive: () => void;
 }) {
   const navigate = useNavigate();
@@ -121,6 +109,7 @@ function VideoTile({
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentText, setCommentText] = useState("");
   const [posting, setPosting] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   const isOwn = user?.id === post.author.id;
 
@@ -152,6 +141,7 @@ function VideoTile({
     }
     v.currentTime = 0;
     maxWatchedRef.current = 0;
+    setPaused(false);
     v.play().catch(() => {});
     const onTimeUpdate = () => {
       maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
@@ -221,26 +211,38 @@ function VideoTile({
     else await navigator.clipboard.writeText(url).catch(() => {});
   };
 
+  const handleTogglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+      setPaused(false);
+    } else {
+      v.pause();
+      setPaused(true);
+    }
+  };
+
   return (
     <div ref={tileRef} className="relative h-full w-full snap-start snap-always">
       <video
         ref={videoRef}
         src={post.video_url ?? undefined}
         poster={post.cover_url ?? undefined}
-        muted={muted}
         loop
         playsInline
-        onClick={() => onMutedChange(!muted)}
+        onClick={handleTogglePlay}
         className="h-full w-full object-contain bg-black"
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
-      <button
-        onClick={() => onMutedChange(!muted)}
-        className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/35 p-2.5 text-white backdrop-blur"
-      >
-        {muted ? <VolumeX className="h-4.5 w-4.5" /> : <Volume2 className="h-4.5 w-4.5" />}
-      </button>
+      {paused && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/40 backdrop-blur">
+            <Play className="h-8 w-8 fill-white text-white" />
+          </span>
+        </div>
+      )}
 
       <div className="absolute right-3 bottom-28 z-10 flex flex-col items-center gap-5">
         <button onClick={() => navigate(`/profile/${post.author.id}`)} className="relative">
