@@ -62,6 +62,7 @@ const Conversation = lazy(() => import("./screens/chat/Conversation").then((m) =
 const GroupChat = lazy(() => import("./screens/chat/GroupChat").then((m) => ({ default: m.GroupChat })));
 const GroupInfo = lazy(() => import("./screens/chat/GroupInfo").then((m) => ({ default: m.GroupInfo })));
 const ArchivedChats = lazy(() => import("./screens/chat/ArchivedChats").then((m) => ({ default: m.ArchivedChats })));
+const ChatFolders = lazy(() => import("./screens/chat/ChatFolders").then((m) => ({ default: m.ChatFolders })));
 const AccountDetails = lazy(() => import("./screens/chat/AccountDetails").then((m) => ({ default: m.AccountDetails })));
 const NotificationSettings = lazy(() => import("./screens/chat/NotificationSettings").then((m) => ({ default: m.NotificationSettings })));
 const DataStorage = lazy(() => import("./screens/chat/DataStorage").then((m) => ({ default: m.DataStorage })));
@@ -126,6 +127,7 @@ export default function App() {
                   <Route path="/chat/group/:id" element={<GroupChat />} />
                   <Route path="/chat/group/:id/info" element={<GroupInfo />} />
                   <Route path="/chat/archived" element={<ArchivedChats />} />
+                  <Route path="/chat/folders" element={<ChatFolders />} />
                   <Route path="/settings/account" element={<AccountDetails />} />
                   <Route path="/settings/notifications" element={<NotificationSettings />} />
                   <Route path="/settings/data" element={<DataStorage />} />

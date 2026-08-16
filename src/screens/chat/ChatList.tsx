@@ -1,27 +1,47 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SquarePen, Loader2, Bookmark, Archive } from "lucide-react";
+import { Search, SquarePen, Loader2, Bookmark, Archive, Folder, Star, Users, Bell, Briefcase, Settings2 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../context/AuthContext";
-import { listConversations, getOrCreateSavedMessages, setConversationArchived, type ChatConversation } from "../../lib/api";
+import {
+  listConversations,
+  getOrCreateSavedMessages,
+  setConversationArchived,
+  listChatFolders,
+  type ChatConversation,
+  type ChatFolder,
+} from "../../lib/api";
+
+const ICONS: Record<string, typeof Folder> = { folder: Folder, star: Star, users: Users, bell: Bell, briefcase: Briefcase };
 
 export function ChatList() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [conversations, setConversations] = useState<ChatConversation[] | null>(null);
+  const [folders, setFolders] = useState<ChatFolder[]>([]);
+  const [activeFolder, setActiveFolder] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<ChatConversation | null>(null);
 
   useEffect(() => {
     if (!user) return;
     listConversations(user.id).then(setConversations).catch(() => setConversations([]));
+    listChatFolders(user.id).then(setFolders).catch(() => setFolders([]));
   }, [user]);
 
   const savedMessages = (conversations ?? []).find((c) => c.is_self) ?? null;
   const archivedCount = (conversations ?? []).filter((c) => c.archived && !c.is_self).length;
-  const filtered = (conversations ?? []).filter(
-    (c) => !c.is_self && !c.archived && c.other.name.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const activeCustomFolder = folders.find((f) => f.id === activeFolder) ?? null;
+  const activeFolderIds = activeCustomFolder ? new Set(activeCustomFolder.conversationIds) : null;
+
+  const filtered = (conversations ?? [])
+    .filter((c) => !c.is_self && !c.archived)
+    .filter((c) => c.other.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((c) => {
+      if (activeFolder === "all") return true;
+      if (activeFolder === "unread") return c.unread;
+      return activeFolderIds?.has(c.id) ?? true;
+    });
 
   const openSavedMessages = async () => {
     if (!user) return;
@@ -62,13 +82,31 @@ export function ChatList() {
         </button>
       </div>
 
+      <div className="no-scrollbar mb-3 flex items-center gap-2 overflow-x-auto">
+        <FolderChip label="All" active={activeFolder === "all"} onClick={() => setActiveFolder("all")} />
+        <FolderChip label="Unread" active={activeFolder === "unread"} onClick={() => setActiveFolder("unread")} />
+        {folders.map((f) => {
+          const Icon = ICONS[f.icon] ?? Folder;
+          return (
+            <FolderChip key={f.id} label={f.name} icon={Icon} active={activeFolder === f.id} onClick={() => setActiveFolder(f.id)} />
+          );
+        })}
+        <button
+          onClick={() => navigate("/chat/folders")}
+          className="flex shrink-0 items-center justify-center rounded-full chip p-2 text-mist"
+          title="Manage folders"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
       {conversations === null ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-mist" />
         </div>
       ) : (
         <div className="flex flex-col">
-          {!query.trim() && (
+          {!query.trim() && activeFolder === "all" && (
             <button
               onClick={openSavedMessages}
               className="flex items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
@@ -86,7 +124,7 @@ export function ChatList() {
             </button>
           )}
 
-          {!query.trim() && archivedCount > 0 && (
+          {!query.trim() && activeFolder === "all" && archivedCount > 0 && (
             <button
               onClick={() => navigate("/chat/archived")}
               className="flex items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
@@ -103,12 +141,16 @@ export function ChatList() {
             </button>
           )}
 
-          {filtered.length === 0 && !savedMessages && archivedCount === 0 ? (
+          {filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <p className="font-display text-sm font-semibold text-ink">No conversations yet</p>
-              <p className="max-w-[240px] text-[12.5px] text-mist">
-                Go to <span className="text-cyan-300">People</span> and message someone to start chatting.
+              <p className="font-display text-sm font-semibold text-ink">
+                {activeFolder === "all" ? "No conversations yet" : activeFolder === "unread" ? "You're all caught up" : "No chats in this folder"}
               </p>
+              {activeFolder === "all" && (
+                <p className="max-w-[240px] text-[12.5px] text-mist">
+                  Go to <span className="text-cyan-300">People</span> and message someone to start chatting.
+                </p>
+              )}
             </div>
           ) : (
             filtered.map((c) => (
@@ -132,6 +174,30 @@ export function ChatList() {
         </>
       )}
     </div>
+  );
+}
+
+function FolderChip({
+  label,
+  icon: Icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon?: typeof Folder;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
+        active ? "grad-purple-blue text-white" : "chip text-mist"
+      }`}
+    >
+      {Icon && <Icon className="h-3 w-3" />}
+      {label}
+    </button>
   );
 }
 
@@ -170,12 +236,17 @@ function ConversationRow({
     >
       <Avatar name={conversation.other.name} avatarUrl={conversation.other.avatar_url} size={50} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] font-semibold text-ink">{conversation.other.name}</p>
-        <p className="truncate text-[12.5px] text-mist">{conversation.last_message ?? "Say hello 👋"}</p>
+        <p className={`truncate text-[14px] ${conversation.unread ? "font-bold text-ink" : "font-semibold text-ink"}`}>
+          {conversation.other.name}
+        </p>
+        <p className={`truncate text-[12.5px] ${conversation.unread ? "text-ink/80" : "text-mist"}`}>
+          {conversation.last_message ?? "Say hello 👋"}
+        </p>
       </div>
-      {conversation.last_message_at && (
-        <span className="shrink-0 text-[11px] text-mist">{timeAgo(conversation.last_message_at)}</span>
-      )}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {conversation.last_message_at && <span className="text-[11px] text-mist">{timeAgo(conversation.last_message_at)}</span>}
+        {conversation.unread && <span className="h-2 w-2 rounded-full bg-cyan-400" />}
+      </div>
     </button>
   );
 }

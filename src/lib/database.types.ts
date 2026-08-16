@@ -600,6 +600,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      chat_folders: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          icon: string;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          icon?: string;
+          position?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          icon?: string;
+          position?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_folder_conversations: {
+        Row: {
+          folder_id: string;
+          conversation_id: string;
+        };
+        Insert: {
+          folder_id: string;
+          conversation_id: string;
+        };
+        Update: {
+          folder_id?: string;
+          conversation_id?: string;
+        };
+        Relationships: [];
+      };
       groups: {
         Row: {
           id: string;

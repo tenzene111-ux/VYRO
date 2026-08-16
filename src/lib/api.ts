@@ -608,20 +608,28 @@ export type ChatConversation = {
   last_message_at: string | null;
   is_self: boolean;
   archived: boolean;
+  unread: boolean;
 };
 
 export async function listConversations(userId: string): Promise<ChatConversation[]> {
   const { data: memberships, error } = await supabase
     .from("conversation_members")
-    .select("conversation_id, archived")
+    .select("conversation_id, archived, last_read_at")
     .eq("user_id", userId);
   if (error) throw error;
-  const conversationIds = (memberships ?? []).map((m) => m.conversation_id);
-  if (conversationIds.length === 0) return [];
+  const allMembershipIds = (memberships ?? []).map((m) => m.conversation_id);
+  if (allMembershipIds.length === 0) return [];
   const archivedByConversation = new Map((memberships ?? []).map((m) => [m.conversation_id, m.archived]));
+  const lastReadByConversation = new Map((memberships ?? []).map((m) => [m.conversation_id, m.last_read_at]));
 
-  const { data: conversations } = await supabase.from("conversations").select("id, is_self").in("id", conversationIds);
+  const { data: conversations } = await supabase.from("conversations").select("id, is_self, is_group").in("id", allMembershipIds);
   const isSelfByConversation = new Map((conversations ?? []).map((c) => [c.id, c.is_self]));
+  // Group conversations have their own listing (GroupsTab, via
+  // listMyGroups) and don't fit this "single other person" model — exclude
+  // them here so a group never leaks into the 1:1 chat list showing one
+  // arbitrary member's name, with a tap opening the wrong (1:1) screen.
+  const conversationIds = (conversations ?? []).filter((c) => !c.is_group).map((c) => c.id);
+  if (conversationIds.length === 0) return [];
 
   const { data: allMembers } = await supabase
     .from("conversation_members")
@@ -638,7 +646,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, deleted_at, created_at")
+    .select("conversation_id, sender_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, deleted_at, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
@@ -654,6 +662,8 @@ export async function listConversations(userId: string): Promise<ChatConversatio
       const other = otherId ? profileById.get(otherId) : undefined;
       if (!other) return null;
       const last = lastByConversation.get(id);
+      const lastReadAt = lastReadByConversation.get(id);
+      const unread = !!last && last.sender_id !== userId && (!lastReadAt || new Date(last.created_at) > new Date(lastReadAt));
       return {
         id,
         other,
@@ -661,6 +671,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
         last_message_at: last?.created_at ?? null,
         is_self: isSelf,
         archived: archivedByConversation.get(id) ?? false,
+        unread,
       };
     })
     .filter((c): c is ChatConversation => c !== null)
@@ -690,6 +701,66 @@ export async function setConversationArchived(userId: string, conversationId: st
     .update({ archived })
     .eq("conversation_id", conversationId)
     .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export type ChatFolder = { id: string; name: string; icon: string; position: number; conversationIds: string[] };
+
+export async function listChatFolders(userId: string): Promise<ChatFolder[]> {
+  const { data: folders, error } = await supabase
+    .from("chat_folders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  if (!folders || folders.length === 0) return [];
+
+  const folderIds = folders.map((f) => f.id);
+  const { data: links } = await supabase.from("chat_folder_conversations").select("folder_id, conversation_id").in("folder_id", folderIds);
+  const conversationIdsByFolder = new Map<string, string[]>();
+  for (const l of links ?? []) {
+    const cur = conversationIdsByFolder.get(l.folder_id) ?? [];
+    cur.push(l.conversation_id);
+    conversationIdsByFolder.set(l.folder_id, cur);
+  }
+
+  return folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    icon: f.icon,
+    position: f.position,
+    conversationIds: conversationIdsByFolder.get(f.id) ?? [],
+  }));
+}
+
+export async function createChatFolder(userId: string, name: string, icon: string, conversationIds: string[]): Promise<string> {
+  const folderId = crypto.randomUUID();
+  const { error } = await supabase.from("chat_folders").insert({ id: folderId, user_id: userId, name, icon });
+  if (error) throw error;
+  if (conversationIds.length > 0) {
+    const { error: linkError } = await supabase
+      .from("chat_folder_conversations")
+      .insert(conversationIds.map((conversation_id) => ({ folder_id: folderId, conversation_id })));
+    if (linkError) throw linkError;
+  }
+  return folderId;
+}
+
+export async function updateChatFolder(folderId: string, name: string, icon: string, conversationIds: string[]) {
+  const { error } = await supabase.from("chat_folders").update({ name, icon }).eq("id", folderId);
+  if (error) throw error;
+  const { error: delError } = await supabase.from("chat_folder_conversations").delete().eq("folder_id", folderId);
+  if (delError) throw delError;
+  if (conversationIds.length > 0) {
+    const { error: insError } = await supabase
+      .from("chat_folder_conversations")
+      .insert(conversationIds.map((conversation_id) => ({ folder_id: folderId, conversation_id })));
+    if (insError) throw insError;
+  }
+}
+
+export async function deleteChatFolder(folderId: string) {
+  const { error } = await supabase.from("chat_folders").delete().eq("id", folderId);
   if (error) throw error;
 }
 
