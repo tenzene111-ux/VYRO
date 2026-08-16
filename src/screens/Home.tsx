@@ -132,7 +132,7 @@ export function Home() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4 pb-4">
+          <div className="-mx-4 flex flex-col pb-4">
             {posts.map((p) => (
               <PostCard key={p.id} post={p} />
             ))}

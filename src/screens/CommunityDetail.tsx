@@ -154,7 +154,7 @@ export function CommunityDetail() {
                 <p className="max-w-[240px] text-[12.5px] text-mist">Be the first to share something here.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-4 pb-8">
+              <div className="-mx-4 flex flex-col pb-8">
                 {posts.map((p) => (
                   <PostCard key={p.id} post={p} />
                 ))}

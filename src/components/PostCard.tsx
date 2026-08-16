@@ -67,7 +67,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   };
 
   return (
-    <article className="overflow-hidden rounded-3xl glass-card animate-rise">
+    <article className="border-b border-white/10 pb-3 animate-rise">
       <div className="flex items-center gap-3 px-4 pt-4">
         <button onClick={() => navigate(`/profile/${post.author.id}`)}>
           <Avatar name={post.author.name} avatarUrl={post.author.avatar_url} size={40} />
@@ -119,7 +119,7 @@ export function PostCard({ post }: { post: FeedPost }) {
       {post.video_url && (
         <button
           onClick={() => navigate(`/watch/${post.id}`)}
-          className="relative mx-4 mt-3 flex aspect-[4/5] w-[calc(100%-2rem)] items-center justify-center overflow-hidden rounded-2xl bg-black"
+          className="relative mt-3 flex aspect-[4/5] w-full items-center justify-center overflow-hidden bg-black"
         >
           {post.cover_url ? (
             <img src={post.cover_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -139,7 +139,7 @@ export function PostCard({ post }: { post: FeedPost }) {
       )}
 
       {!post.video_url && post.image_url && (
-        <div className="mx-4 mt-3 overflow-hidden rounded-2xl">
+        <div className="mt-3">
           <img src={post.image_url} alt="" className="max-h-[480px] w-full object-cover" />
         </div>
       )}
