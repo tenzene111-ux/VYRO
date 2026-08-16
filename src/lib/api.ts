@@ -638,7 +638,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, text, audio_url, ciphertext, image_url, video_url, file_name, deleted_at, created_at")
+    .select("conversation_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, deleted_at, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
@@ -736,6 +736,18 @@ export async function getOrCreateConversationWith(userId: string, otherUserId: s
 
 export type MessageReaction = { user_id: string; emoji: string };
 
+export type PollOption = { id: string; text: string; position: number };
+export type PollVote = { option_id: string; user_id: string };
+export type Poll = {
+  id: string;
+  question: string;
+  allow_multiple: boolean;
+  closed: boolean;
+  creator_id: string;
+  options: PollOption[];
+  votes: PollVote[];
+};
+
 export type ChatMessage = {
   id: string;
   conversation_id: string;
@@ -757,15 +769,22 @@ export type ChatMessage = {
   file_url: string | null;
   file_name: string | null;
   file_size: number | null;
+  poll_id: string | null;
   created_at: string;
   reactions: MessageReaction[];
+  poll: Poll | null;
 };
 
 export function messagePreviewText(
-  m: Pick<ChatMessage, "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at">
+  m: Pick<ChatMessage, "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at"> & {
+    poll?: Pick<Poll, "question"> | null;
+    poll_id?: string | null;
+  }
 ): string {
   if (m.deleted_at) return "This message was deleted";
   if (m.text) return m.text;
+  if (m.poll) return `📊 ${m.poll.question}`;
+  if (m.poll_id) return "📊 Poll";
   if (m.image_url) return "📷 Photo";
   if (m.video_url) return "🎬 Video";
   if (m.file_name) return `📄 ${m.file_name}`;
@@ -794,7 +813,89 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
     reactionsByMessage.set(r.message_id, cur);
   }
 
-  return data.map((m) => ({ ...m, reactions: reactionsByMessage.get(m.id) ?? [] }));
+  const pollIds = [...new Set(data.map((m) => m.poll_id).filter((id): id is string => !!id))];
+  const pollsById = new Map<string, Poll>();
+  if (pollIds.length > 0) {
+    const { data: polls } = await supabase.from("polls").select("*").in("id", pollIds);
+    const { data: options } = await supabase.from("poll_options").select("*").in("poll_id", pollIds).order("position", { ascending: true });
+    const { data: votes } = await supabase.from("poll_votes").select("poll_id, option_id, user_id").in("poll_id", pollIds);
+
+    const optionsByPoll = new Map<string, PollOption[]>();
+    for (const o of options ?? []) {
+      const cur = optionsByPoll.get(o.poll_id) ?? [];
+      cur.push({ id: o.id, text: o.text, position: o.position });
+      optionsByPoll.set(o.poll_id, cur);
+    }
+    const votesByPoll = new Map<string, PollVote[]>();
+    for (const v of votes ?? []) {
+      const cur = votesByPoll.get(v.poll_id) ?? [];
+      cur.push({ option_id: v.option_id, user_id: v.user_id });
+      votesByPoll.set(v.poll_id, cur);
+    }
+    for (const p of polls ?? []) {
+      pollsById.set(p.id, {
+        id: p.id,
+        question: p.question,
+        allow_multiple: p.allow_multiple,
+        closed: p.closed,
+        creator_id: p.creator_id,
+        options: optionsByPoll.get(p.id) ?? [],
+        votes: votesByPoll.get(p.id) ?? [],
+      });
+    }
+  }
+
+  return data.map((m) => ({
+    ...m,
+    reactions: reactionsByMessage.get(m.id) ?? [],
+    poll: m.poll_id ? pollsById.get(m.poll_id) ?? null : null,
+  }));
+}
+
+export async function sendPollMessage(
+  conversationId: string,
+  senderId: string,
+  question: string,
+  options: string[],
+  allowMultiple: boolean,
+  replyToId?: string
+) {
+  const { data: pollId, error } = await supabase.rpc("create_poll", {
+    p_conversation_id: conversationId,
+    p_question: question,
+    p_options: options,
+    p_allow_multiple: allowMultiple,
+  });
+  if (error) throw error;
+  const { error: msgError } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, poll_id: pollId, reply_to_id: replyToId ?? null });
+  if (msgError) throw msgError;
+  notifyConversationMembers(conversationId, senderId, `📊 ${question}`).catch(() => {});
+}
+
+export async function votePoll(pollId: string, optionIds: string[]) {
+  const { error } = await supabase.rpc("vote_poll", { p_poll_id: pollId, p_option_ids: optionIds });
+  if (error) throw error;
+}
+
+export async function closePoll(pollId: string) {
+  const { error } = await supabase.rpc("close_poll", { p_poll_id: pollId });
+  if (error) throw error;
+}
+
+export function subscribeToPollVotes(conversationId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`poll-votes-${conversationId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "poll_votes", filter: `conversation_id=eq.${conversationId}` },
+      onChange
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export async function sendMessage(conversationId: string, senderId: string, text: string, replyToId?: string) {
@@ -886,6 +987,7 @@ export async function deleteMessageForEveryone(messageId: string) {
       file_url: null,
       file_name: null,
       file_size: null,
+      poll_id: null,
       pinned: false,
       deleted_at: new Date().toISOString(),
     })
@@ -986,13 +1088,36 @@ export async function listReadPointers(conversationId: string): Promise<{ user_i
   return data ?? [];
 }
 
+async function fetchPoll(pollId: string): Promise<Poll | null> {
+  const { data: poll } = await supabase.from("polls").select("*").eq("id", pollId).maybeSingle();
+  if (!poll) return null;
+  const { data: options } = await supabase.from("poll_options").select("*").eq("poll_id", pollId).order("position", { ascending: true });
+  const { data: votes } = await supabase.from("poll_votes").select("option_id, user_id").eq("poll_id", pollId);
+  return {
+    id: poll.id,
+    question: poll.question,
+    allow_multiple: poll.allow_multiple,
+    closed: poll.closed,
+    creator_id: poll.creator_id,
+    options: (options ?? []).map((o) => ({ id: o.id, text: o.text, position: o.position })),
+    votes: (votes ?? []).map((v) => ({ option_id: v.option_id, user_id: v.user_id })),
+  };
+}
+
 export function subscribeToMessages(conversationId: string, onInsert: (message: ChatMessage) => void) {
   const channel = supabase
     .channel(`messages:${conversationId}`)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
-      (payload) => onInsert({ ...(payload.new as Omit<ChatMessage, "reactions">), reactions: [] })
+      (payload) => {
+        const row = payload.new as Omit<ChatMessage, "reactions" | "poll">;
+        if (row.poll_id) {
+          fetchPoll(row.poll_id).then((poll) => onInsert({ ...row, reactions: [], poll }));
+        } else {
+          onInsert({ ...row, reactions: [], poll: null });
+        }
+      }
     )
     .subscribe();
 

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, BarChart3 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { MessageActionSheet } from "../../components/MessageActionSheet";
 import { ChatMediaBubble } from "../../components/ChatMediaBubble";
+import { ChatPollBubble } from "../../components/ChatPollBubble";
+import { CreatePollSheet } from "../../components/CreatePollSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
 import {
@@ -19,6 +21,9 @@ import {
   sendImageMessage,
   sendVideoMessageFile,
   sendFileMessage,
+  sendPollMessage,
+  votePoll,
+  closePoll,
   sendEncryptedGroupMessage,
   forwardMessage,
   editMessage,
@@ -39,6 +44,7 @@ import {
   subscribeToMessageUpdates,
   subscribeToReactions,
   subscribeToReadReceipts,
+  subscribeToPollVotes,
   createTypingChannel,
   messagePreviewText,
   type ChatConversation,
@@ -82,6 +88,7 @@ export function GroupChat() {
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
   const [forwardMessageTarget, setForwardMessageTarget] = useState<ChatMessage | null>(null);
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [readPointers, setReadPointers] = useState<{ user_id: string; last_read_at: string }[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -185,7 +192,7 @@ export function GroupChat() {
       });
     });
     const unsubscribeUpdate = subscribeToMessageUpdates(convId, (updated) => {
-      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions } : m)) : prev));
+      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll } : m)) : prev));
     });
     const unsubscribeReactions = subscribeToReactions(convId, () => {
       listMessages(convId).then(setMessages);
@@ -193,12 +200,16 @@ export function GroupChat() {
     const unsubscribeReads = subscribeToReadReceipts(convId, () => {
       listReadPointers(convId).then(setReadPointers);
     });
+    const unsubscribePolls = subscribeToPollVotes(convId, () => {
+      listMessages(convId).then(setMessages);
+    });
 
     return () => {
       unsubscribeInsert();
       unsubscribeUpdate();
       unsubscribeReactions();
       unsubscribeReads();
+      unsubscribePolls();
     };
   }, [group?.conversation_id, user]);
 
@@ -285,6 +296,45 @@ export function GroupChat() {
     if (!group?.conversation_id || !user) return;
     await sendVoiceMessage(group.conversation_id, user.id, audioUrl, durationSeconds, replyingTo?.id);
     setReplyingTo(null);
+  };
+
+  const handleCreatePoll = async (question: string, options: string[], allowMultiple: boolean) => {
+    if (!group?.conversation_id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendPollMessage(group.conversation_id, user.id, question, options, allowMultiple, replyToId);
+  };
+
+  const handleVote = async (message: ChatMessage, optionIds: string[]) => {
+    if (!user || !message.poll) return;
+    const poll = message.poll;
+    setMessages((prev) =>
+      prev
+        ? prev.map((m) =>
+            m.id === message.id && m.poll
+              ? { ...m, poll: { ...m.poll, votes: [...m.poll.votes.filter((v) => v.user_id !== user.id), ...optionIds.map((option_id) => ({ option_id, user_id: user.id }))] } }
+              : m
+          )
+        : prev
+    );
+    try {
+      await votePoll(poll.id, optionIds);
+    } catch {
+      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+    }
+  };
+
+  const handleClosePoll = async (message: ChatMessage) => {
+    if (!message.poll) return;
+    const pollId = message.poll.id;
+    setMessages((prev) =>
+      prev ? prev.map((m) => (m.id === message.id && m.poll ? { ...m, poll: { ...m.poll, closed: true } } : m)) : prev
+    );
+    try {
+      await closePoll(pollId);
+    } catch {
+      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+    }
   };
 
   const handleAttach = async (file: File) => {
@@ -541,6 +591,8 @@ export function GroupChat() {
                   )}
                   {m.deleted_at ? (
                     <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
+                  ) : m.poll ? (
+                    <ChatPollBubble poll={m.poll} mine={mine} userId={user?.id ?? ""} onVote={(ids) => handleVote(m, ids)} onClose={() => handleClosePoll(m)} />
                   ) : m.image_url || m.video_url || m.file_url ? (
                     <ChatMediaBubble message={m} mine={mine} />
                   ) : m.audio_url ? (
@@ -637,6 +689,13 @@ export function GroupChat() {
             >
               {uploading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Paperclip className="h-4.5 w-4.5" />}
             </button>
+            <button
+              onClick={() => setPollComposerOpen(true)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
+              title="Create a poll"
+            >
+              <BarChart3 className="h-4.5 w-4.5" />
+            </button>
             <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
               <input
                 value={input}
@@ -677,6 +736,8 @@ export function GroupChat() {
           onForward={() => handleOpenForward(actionMessage)}
         />
       )}
+
+      {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}
 
       {forwardMessageTarget && (
         <>

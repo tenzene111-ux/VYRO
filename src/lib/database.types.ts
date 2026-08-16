@@ -472,6 +472,7 @@ export type Database = {
           file_url: string | null;
           file_name: string | null;
           file_size: number | null;
+          poll_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -495,6 +496,7 @@ export type Database = {
           file_url?: string | null;
           file_name?: string | null;
           file_size?: number | null;
+          poll_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -518,6 +520,82 @@ export type Database = {
           file_url?: string | null;
           file_name?: string | null;
           file_size?: number | null;
+          poll_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      polls: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          creator_id: string;
+          question: string;
+          allow_multiple: boolean;
+          closed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          creator_id: string;
+          question: string;
+          allow_multiple?: boolean;
+          closed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          conversation_id?: string;
+          creator_id?: string;
+          question?: string;
+          allow_multiple?: boolean;
+          closed?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      poll_options: {
+        Row: {
+          id: string;
+          poll_id: string;
+          text: string;
+          position: number;
+        };
+        Insert: {
+          id?: string;
+          poll_id: string;
+          text: string;
+          position?: number;
+        };
+        Update: {
+          id?: string;
+          poll_id?: string;
+          text?: string;
+          position?: number;
+        };
+        Relationships: [];
+      };
+      poll_votes: {
+        Row: {
+          poll_id: string;
+          option_id: string;
+          user_id: string;
+          conversation_id: string;
+          created_at: string;
+        };
+        Insert: {
+          poll_id: string;
+          option_id: string;
+          user_id: string;
+          conversation_id: string;
+          created_at?: string;
+        };
+        Update: {
+          poll_id?: string;
+          option_id?: string;
+          user_id?: string;
+          conversation_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -1208,6 +1286,18 @@ export type Database = {
       };
       admin_delete_group_message: {
         Args: { p_message_id: string };
+        Returns: undefined;
+      };
+      create_poll: {
+        Args: { p_conversation_id: string; p_question: string; p_options: string[]; p_allow_multiple: boolean };
+        Returns: string;
+      };
+      vote_poll: {
+        Args: { p_poll_id: string; p_option_ids: string[] };
+        Returns: undefined;
+      };
+      close_poll: {
+        Args: { p_poll_id: string };
         Returns: undefined;
       };
       send_gift: {

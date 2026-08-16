@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark, BarChart3 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { MessageActionSheet } from "../../components/MessageActionSheet";
 import { ChatMediaBubble } from "../../components/ChatMediaBubble";
+import { ChatPollBubble } from "../../components/ChatPollBubble";
+import { CreatePollSheet } from "../../components/CreatePollSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
 import {
@@ -18,6 +20,9 @@ import {
   sendImageMessage,
   sendVideoMessageFile,
   sendFileMessage,
+  sendPollMessage,
+  votePoll,
+  closePoll,
   forwardMessage,
   editMessage,
   editEncryptedMessage,
@@ -32,6 +37,7 @@ import {
   subscribeToMessageUpdates,
   subscribeToReactions,
   subscribeToReadReceipts,
+  subscribeToPollVotes,
   createTypingChannel,
   messagePreviewText,
   type ChatConversation,
@@ -79,6 +85,7 @@ export function Conversation() {
   const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
   const [forwardMessageTarget, setForwardMessageTarget] = useState<ChatMessage | null>(null);
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -110,7 +117,7 @@ export function Conversation() {
       markConversationRead(id, user.id).catch(() => {});
     });
     const unsubscribeUpdate = subscribeToMessageUpdates(id, (updated) => {
-      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.id === updated.id ? m.reactions : [] } : m)) : prev));
+      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll } : m)) : prev));
     });
     const unsubscribeReactions = subscribeToReactions(id, () => {
       listMessages(id).then(setMessages);
@@ -120,12 +127,16 @@ export function Conversation() {
         if (o) getOtherLastRead(id, o.id).then(setOtherLastRead);
       });
     });
+    const unsubscribePolls = subscribeToPollVotes(id, () => {
+      listMessages(id).then(setMessages);
+    });
 
     return () => {
       unsubscribeInsert();
       unsubscribeUpdate();
       unsubscribeReactions();
       unsubscribeReads();
+      unsubscribePolls();
     };
   }, [id, user]);
 
@@ -218,6 +229,45 @@ export function Conversation() {
     if (!id || !user) return;
     await sendVoiceMessage(id, user.id, audioUrl, durationSeconds, replyingTo?.id);
     setReplyingTo(null);
+  };
+
+  const handleCreatePoll = async (question: string, options: string[], allowMultiple: boolean) => {
+    if (!id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendPollMessage(id, user.id, question, options, allowMultiple, replyToId);
+  };
+
+  const handleVote = async (message: ChatMessage, optionIds: string[]) => {
+    if (!user || !message.poll) return;
+    const poll = message.poll;
+    setMessages((prev) =>
+      prev
+        ? prev.map((m) =>
+            m.id === message.id && m.poll
+              ? { ...m, poll: { ...m.poll, votes: [...m.poll.votes.filter((v) => v.user_id !== user.id), ...optionIds.map((option_id) => ({ option_id, user_id: user.id }))] } }
+              : m
+          )
+        : prev
+    );
+    try {
+      await votePoll(poll.id, optionIds);
+    } catch {
+      if (id) listMessages(id).then(setMessages);
+    }
+  };
+
+  const handleClosePoll = async (message: ChatMessage) => {
+    if (!message.poll) return;
+    const pollId = message.poll.id;
+    setMessages((prev) =>
+      prev ? prev.map((m) => (m.id === message.id && m.poll ? { ...m, poll: { ...m.poll, closed: true } } : m)) : prev
+    );
+    try {
+      await closePoll(pollId);
+    } catch {
+      if (id) listMessages(id).then(setMessages);
+    }
   };
 
   const handleAttach = async (file: File) => {
@@ -439,12 +489,15 @@ export function Conversation() {
                 key={m.id}
                 message={m}
                 mine={m.sender_id === user?.id}
+                userId={user?.id ?? ""}
                 translateOn={translateOn}
                 targetLang={targetLang}
                 allMessages={messages}
                 read={m.sender_id === user?.id && !!otherLastRead && new Date(m.created_at) <= new Date(otherLastRead)}
                 onOpenActions={() => setActionMessage(m)}
                 onJumpToReply={scrollToMessage}
+                onVote={(optionIds) => handleVote(m, optionIds)}
+                onClosePoll={() => handleClosePoll(m)}
               />
             ))}
           </div>
@@ -515,6 +568,15 @@ export function Conversation() {
             >
               {uploading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Paperclip className="h-4.5 w-4.5" />}
             </button>
+            {!isSelf && (
+              <button
+                onClick={() => setPollComposerOpen(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
+                title="Create a poll"
+              >
+                <BarChart3 className="h-4.5 w-4.5" />
+              </button>
+            )}
             <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
               <input
                 value={input}
@@ -565,6 +627,8 @@ export function Conversation() {
         />
       )}
 
+      {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}
+
       {forwardMessageTarget && (
         <>
           <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setForwardMessageTarget(null)} />
@@ -602,21 +666,27 @@ export function Conversation() {
 function Bubble({
   message,
   mine,
+  userId,
   translateOn,
   targetLang,
   allMessages,
   read,
   onOpenActions,
   onJumpToReply,
+  onVote,
+  onClosePoll,
 }: {
   message: ChatMessage;
   mine: boolean;
+  userId: string;
   translateOn: boolean;
   targetLang: string;
   allMessages: ChatMessage[];
   read: boolean;
   onOpenActions: () => void;
   onJumpToReply: (id: string) => void;
+  onVote: (optionIds: string[]) => void;
+  onClosePoll: () => void;
 }) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPress = () => {
@@ -658,6 +728,8 @@ function Bubble({
         )}
         {message.deleted_at ? (
           <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
+        ) : message.poll ? (
+          <ChatPollBubble poll={message.poll} mine={mine} userId={userId} onVote={onVote} onClose={onClosePoll} />
         ) : message.image_url || message.video_url || message.file_url ? (
           <ChatMediaBubble message={message} mine={mine} />
         ) : message.audio_url ? (
