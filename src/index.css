@@ -23,6 +23,7 @@
 
 /* ---------- theme-able surface tokens (dark = default) ---------- */
 :root {
+  color-scheme: dark;
   --glass-tint-1: rgba(255, 255, 255, 0.055);
   --glass-tint-2: rgba(255, 255, 255, 0.02);
   --glass-border: rgba(255, 255, 255, 0.08);
@@ -52,6 +53,7 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
+    color-scheme: light;
     --color-void: #f5f6fb;
     --color-void-2: #eceef8;
     --color-abyss: #e4e6f4;
@@ -90,6 +92,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --color-void: #f5f6fb;
   --color-void-2: #eceef8;
   --color-abyss: #e4e6f4;
@@ -124,6 +127,10 @@
 
   --shimmer-a: rgba(20, 20, 45, 0.35);
   --shimmer-b: rgba(20, 20, 45, 0.9);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @keyframes glow-pulse {
@@ -203,8 +210,12 @@ html, body {
 }
 
 input, textarea, select {
-  color: var(--color-ink);
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--color-ink) !important;
+  -webkit-text-fill-color: var(--color-ink);
   caret-color: var(--color-ink);
+  background-color: transparent;
 }
 
 input:-webkit-autofill,
