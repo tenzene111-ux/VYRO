@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Reply as ReplyIcon,
-  Copy, Pencil, Trash2, Forward, Check, CheckCheck,
-} from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
+import { MessageActionSheet } from "../../components/MessageActionSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
 import {
@@ -36,25 +34,9 @@ import {
 } from "../../lib/api";
 import { ensureKeyPair, deriveSharedKey, encryptText, decryptText } from "../../lib/crypto";
 import { suggestChatReplies, translateText, TRANSLATE_LANGUAGES } from "../../lib/ai";
+import { loadHiddenMessages, hideMessageLocally } from "../../lib/chatLocal";
 
-const QUICK_REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 const TYPING_IDLE_MS = 3000;
-
-function hiddenKey(userId: string) {
-  return `vyro-hidden-messages-${userId}`;
-}
-
-function loadHidden(userId: string): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(hiddenKey(userId)) ?? "[]"));
-  } catch {
-    return new Set();
-  }
-}
-
-function saveHidden(userId: string, ids: Set<string>) {
-  localStorage.setItem(hiddenKey(userId), JSON.stringify([...ids]));
-}
 
 async function resolveMessageText(message: ChatMessage, mine: boolean): Promise<string | null> {
   if (message.text) return message.text;
@@ -104,7 +86,7 @@ export function Conversation() {
 
   useEffect(() => {
     if (!user) return;
-    setHidden(loadHidden(user.id));
+    setHidden(loadHiddenMessages(user.id));
   }, [user]);
 
   useEffect(() => {
@@ -295,11 +277,7 @@ export function Conversation() {
 
   const handleDeleteForMe = (message: ChatMessage) => {
     if (!user) return;
-    setHidden((prev) => {
-      const next = new Set(prev).add(message.id);
-      saveHidden(user.id, next);
-      return next;
-    });
+    setHidden((prev) => hideMessageLocally(user.id, message.id, prev));
   };
 
   const handleDeleteForEveryone = async (message: ChatMessage) => {
@@ -563,96 +541,6 @@ export function Conversation() {
         </>
       )}
     </div>
-  );
-}
-
-function MessageActionSheet({
-  message,
-  mine,
-  onClose,
-  onReply,
-  onReact,
-  onCopy,
-  onEdit,
-  onDeleteForMe,
-  onDeleteForEveryone,
-  onPin,
-  onUnpin,
-  onForward,
-}: {
-  message: ChatMessage;
-  mine: boolean;
-  onClose: () => void;
-  onReply: () => void;
-  onReact: (emoji: string) => void;
-  onCopy: () => void;
-  onEdit: () => void;
-  onDeleteForMe: () => void;
-  onDeleteForEveryone: () => void;
-  onPin: () => void;
-  onUnpin: () => void;
-  onForward: () => void;
-}) {
-  const canEdit = mine && !message.deleted_at && !message.audio_url;
-  const act = (fn: () => void) => {
-    fn();
-    onClose();
-  };
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-[440px] overflow-hidden rounded-3xl glass-strong">
-        <div className="flex items-center justify-center gap-2 border-b border-white/10 px-3 py-3">
-          {QUICK_REACTIONS.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => act(() => onReact(emoji))}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xl transition-transform hover:scale-125"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-        {!message.deleted_at && (
-          <SheetRow icon={ReplyIcon} label="Reply" onClick={() => act(onReply)} />
-        )}
-        {!message.deleted_at && !message.audio_url && <SheetRow icon={Copy} label="Copy" onClick={() => act(onCopy)} />}
-        {canEdit && <SheetRow icon={Pencil} label="Edit" onClick={() => act(onEdit)} />}
-        {!message.deleted_at && <SheetRow icon={Forward} label="Forward" onClick={() => act(onForward)} />}
-        {!message.deleted_at &&
-          (message.pinned ? (
-            <SheetRow icon={Pin} label="Unpin" onClick={() => act(onUnpin)} />
-          ) : (
-            <SheetRow icon={Pin} label="Pin" onClick={() => act(onPin)} />
-          ))}
-        <SheetRow icon={Trash2} label="Delete for me" danger onClick={() => act(onDeleteForMe)} />
-        {mine && !message.deleted_at && <SheetRow icon={Trash2} label="Delete for everyone" danger onClick={() => act(onDeleteForEveryone)} />}
-      </div>
-    </>
-  );
-}
-
-function SheetRow({
-  icon: Icon,
-  label,
-  onClick,
-  danger,
-}: {
-  icon: typeof Pin;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left text-[13.5px] font-medium last:border-b-0 hover:bg-white/5 ${
-        danger ? "text-rose-400" : "text-ink"
-      }`}
-    >
-      <Icon className="h-4.5 w-4.5" />
-      {label}
-    </button>
   );
 }
 

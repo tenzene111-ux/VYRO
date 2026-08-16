@@ -891,6 +891,15 @@ export async function getOtherLastRead(conversationId: string, otherUserId: stri
   return data?.last_read_at ?? null;
 }
 
+export async function listReadPointers(conversationId: string): Promise<{ user_id: string; last_read_at: string }[]> {
+  const { data, error } = await supabase
+    .from("conversation_members")
+    .select("user_id, last_read_at")
+    .eq("conversation_id", conversationId);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export function subscribeToMessages(conversationId: string, onInsert: (message: ChatMessage) => void) {
   const channel = supabase
     .channel(`messages:${conversationId}`)
@@ -1158,8 +1167,16 @@ export async function enableGroupEncryption(groupId: string) {
   if (error) throw error;
 }
 
-export async function sendEncryptedGroupMessage(conversationId: string, senderId: string, ciphertext: string, iv: string) {
-  const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: senderId, ciphertext, iv });
+export async function sendEncryptedGroupMessage(
+  conversationId: string,
+  senderId: string,
+  ciphertext: string,
+  iv: string,
+  replyToId?: string
+) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, ciphertext, iv, reply_to_id: replyToId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🔒 New message").catch(() => {});
 }
