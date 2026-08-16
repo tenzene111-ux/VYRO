@@ -241,16 +241,19 @@ export type Database = {
         Row: {
           post_id: string;
           user_id: string;
+          reaction: string;
           created_at: string;
         };
         Insert: {
           post_id: string;
           user_id: string;
+          reaction?: string;
           created_at?: string;
         };
         Update: {
           post_id?: string;
           user_id?: string;
+          reaction?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -286,16 +289,19 @@ export type Database = {
         Row: {
           comment_id: string;
           user_id: string;
+          reaction: string;
           created_at: string;
         };
         Insert: {
           comment_id: string;
           user_id: string;
+          reaction?: string;
           created_at?: string;
         };
         Update: {
           comment_id?: string;
           user_id?: string;
+          reaction?: string;
           created_at?: string;
         };
         Relationships: [];

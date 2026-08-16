@@ -1,15 +1,37 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play, Bookmark, X } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, ThumbsUp, Send, Loader2, Play, Bookmark, X } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { ReportModal } from "./ReportModal";
 import { useAuth } from "../context/AuthContext";
-import { addComment, listComments, toggleCommentLike, toggleLike, toggleSavePost, type Comment, type FeedPost } from "../lib/api";
+import {
+  addComment,
+  listComments,
+  setCommentReaction,
+  setPostReaction,
+  toggleSavePost,
+  type Comment,
+  type FeedPost,
+  type ReactionType,
+} from "../lib/api";
+
+const REACTIONS: { type: ReactionType; emoji: string; label: string; color: string }[] = [
+  { type: "like", emoji: "👍", label: "Like", color: "text-sky-400" },
+  { type: "love", emoji: "❤️", label: "Love", color: "text-rose-400" },
+  { type: "haha", emoji: "😆", label: "Haha", color: "text-amber-400" },
+  { type: "wow", emoji: "😮", label: "Wow", color: "text-amber-400" },
+  { type: "sad", emoji: "😢", label: "Sad", color: "text-amber-400" },
+  { type: "angry", emoji: "😡", label: "Angry", color: "text-orange-500" },
+];
+
+function reactionMeta(type: ReactionType | null) {
+  return REACTIONS.find((r) => r.type === type) ?? null;
+}
 
 export function PostCard({ post }: { post: FeedPost }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [liked, setLiked] = useState(post.liked_by_me);
+  const [myReaction, setMyReaction] = useState<ReactionType | null>(post.my_reaction);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
   const [saved, setSaved] = useState(post.saved_by_me);
@@ -21,16 +43,17 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
 
-  const handleLike = async () => {
+  const handleReact = async (next: ReactionType | null) => {
     if (!user) return;
-    const next = !liked;
-    setLiked(next);
-    setLikeCount((c) => c + (next ? 1 : -1));
+    const prev = myReaction;
+    if (prev === next) return;
+    setMyReaction(next);
+    setLikeCount((c) => c + (next ? 1 : 0) - (prev ? 1 : 0));
     try {
-      await toggleLike(post.id, user.id, liked);
+      await setPostReaction(post.id, user.id, next);
     } catch {
-      setLiked(!next);
-      setLikeCount((c) => c + (next ? -1 : 1));
+      setMyReaction(prev);
+      setLikeCount((c) => c + (prev ? 1 : 0) - (next ? 1 : 0));
     }
   };
 
@@ -68,17 +91,18 @@ export function PostCard({ post }: { post: FeedPost }) {
     }
   };
 
-  const handleToggleCommentLike = async (comment: Comment) => {
+  const handleCommentReact = async (comment: Comment, next: ReactionType | null) => {
     if (!user) return;
-    const wasLiked = comment.liked_by_me;
-    setComments((prev) =>
-      prev ? updateCommentTree(prev, comment.id, (c) => ({ ...c, liked_by_me: !wasLiked, like_count: c.like_count + (wasLiked ? -1 : 1) })) : prev
+    const prev = comment.my_reaction;
+    if (prev === next) return;
+    setComments((cur) =>
+      cur ? updateCommentTree(cur, comment.id, (c) => ({ ...c, my_reaction: next, like_count: c.like_count + (next ? 1 : 0) - (prev ? 1 : 0) })) : cur
     );
     try {
-      await toggleCommentLike(comment.id, user.id, wasLiked);
+      await setCommentReaction(comment.id, user.id, next);
     } catch {
-      setComments((prev) =>
-        prev ? updateCommentTree(prev, comment.id, (c) => ({ ...c, liked_by_me: wasLiked, like_count: c.like_count + (wasLiked ? 1 : -1) })) : prev
+      setComments((cur) =>
+        cur ? updateCommentTree(cur, comment.id, (c) => ({ ...c, my_reaction: prev, like_count: c.like_count + (prev ? 1 : 0) - (next ? 1 : 0) })) : cur
       );
     }
   };
@@ -162,10 +186,7 @@ export function PostCard({ post }: { post: FeedPost }) {
       )}
 
       <div className="mt-3 flex items-center gap-4 px-4 text-[12.5px] font-medium text-mist">
-        <button onClick={handleLike} className={`flex items-center gap-1.5 ${liked ? "text-rose-400" : "hover:text-ink"}`}>
-          <Heart className={`h-5 w-5 ${liked ? "fill-rose-400" : ""}`} />
-          {likeCount > 0 && formatCount(likeCount)}
-        </button>
+        <ReactButton reaction={myReaction} count={likeCount} size="post" onChange={handleReact} />
         {post.comments_enabled && (
           <button onClick={handleOpenComments} className="flex items-center gap-1.5 hover:text-ink">
             <MessageSquare className="h-5 w-5" />
@@ -191,7 +212,7 @@ export function PostCard({ post }: { post: FeedPost }) {
           ) : (
             <div className="no-scrollbar max-h-72 space-y-3 overflow-y-auto pr-0.5">
               {comments.map((c) => (
-                <CommentRow key={c.id} comment={c} depth={0} onLike={handleToggleCommentLike} onReply={setReplyingTo} />
+                <CommentRow key={c.id} comment={c} depth={0} onReact={handleCommentReact} onReply={setReplyingTo} />
               ))}
             </div>
           )}
@@ -231,15 +252,91 @@ export function PostCard({ post }: { post: FeedPost }) {
   );
 }
 
+function ReactButton({
+  reaction,
+  count,
+  size,
+  onChange,
+}: {
+  reaction: ReactionType | null;
+  count: number;
+  size: "post" | "comment";
+  onChange: (next: ReactionType | null) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressedRef = useRef(false);
+
+  const startPress = () => {
+    longPressedRef.current = false;
+    timerRef.current = setTimeout(() => {
+      longPressedRef.current = true;
+      setPickerOpen(true);
+    }, 400);
+  };
+  const cancelPress = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+  const endPress = () => {
+    cancelPress();
+    if (!longPressedRef.current) onChange(reaction ? null : "like");
+  };
+
+  const meta = reactionMeta(reaction);
+  const pickerEmojiSize = size === "post" ? "text-2xl" : "text-lg";
+  const pickerBtnSize = size === "post" ? "h-10 w-10" : "h-8 w-8";
+
+  return (
+    <div className="relative">
+      {pickerOpen && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setPickerOpen(false)} onPointerDown={() => setPickerOpen(false)} />
+          <div className="absolute bottom-full left-0 z-40 mb-2 flex items-center gap-0.5 rounded-full glass-strong px-2 py-1.5 shadow-lg">
+            {REACTIONS.map((r) => (
+              <button
+                key={r.type}
+                onClick={() => {
+                  onChange(reaction === r.type ? null : r.type);
+                  setPickerOpen(false);
+                }}
+                title={r.label}
+                className={`flex ${pickerBtnSize} items-center justify-center rounded-full ${pickerEmojiSize} leading-none transition-transform hover:scale-125`}
+              >
+                {r.emoji}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <button
+        onPointerDown={startPress}
+        onPointerUp={endPress}
+        onPointerLeave={cancelPress}
+        onContextMenu={(e) => e.preventDefault()}
+        className={`flex select-none items-center gap-1.5 ${
+          size === "post" ? "text-[12.5px]" : "text-[11px]"
+        } font-medium ${meta ? meta.color : "text-mist hover:text-ink"}`}
+      >
+        {meta ? (
+          <span className={size === "post" ? "text-[18px] leading-none" : "text-[13px] leading-none"}>{meta.emoji}</span>
+        ) : (
+          <ThumbsUp className={size === "post" ? "h-5 w-5" : "h-3 w-3"} />
+        )}
+        {count > 0 && formatCount(count)}
+      </button>
+    </div>
+  );
+}
+
 function CommentRow({
   comment,
   depth,
-  onLike,
+  onReact,
   onReply,
 }: {
   comment: Comment;
   depth: number;
-  onLike: (c: Comment) => void;
+  onReact: (c: Comment, next: ReactionType | null) => void;
   onReply: (target: { id: string; name: string }) => void;
 }) {
   return (
@@ -253,13 +350,7 @@ function CommentRow({
           </div>
           <div className="mt-1 flex items-center gap-3 px-1 text-[11px] font-medium text-mist">
             <span>{timeAgo(comment.created_at)}</span>
-            <button
-              onClick={() => onLike(comment)}
-              className={`flex items-center gap-1 ${comment.liked_by_me ? "text-rose-400" : "hover:text-ink"}`}
-            >
-              <Heart className={`h-3 w-3 ${comment.liked_by_me ? "fill-rose-400" : ""}`} />
-              {comment.like_count > 0 && formatCount(comment.like_count)}
-            </button>
+            <ReactButton reaction={comment.my_reaction} count={comment.like_count} size="comment" onChange={(next) => onReact(comment, next)} />
             <button onClick={() => onReply({ id: comment.id, name: comment.author.name })} className="hover:text-ink">
               Reply
             </button>
@@ -269,7 +360,7 @@ function CommentRow({
       {comment.replies.length > 0 && (
         <div className="mt-2.5 space-y-2.5">
           {comment.replies.map((r) => (
-            <CommentRow key={r.id} comment={r} depth={depth + 1} onLike={onLike} onReply={onReply} />
+            <CommentRow key={r.id} comment={r} depth={depth + 1} onReact={onReact} onReply={onReply} />
           ))}
         </div>
       )}

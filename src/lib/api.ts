@@ -36,6 +36,8 @@ async function notifyFollowersLive(hostId: string, liveId: string, title: string
   );
 }
 
+export type ReactionType = "like" | "love" | "haha" | "wow" | "sad" | "angry";
+
 export type FeedPost = {
   id: string;
   text: string;
@@ -52,6 +54,7 @@ export type FeedPost = {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean;
+  my_reaction: ReactionType | null;
   saved_by_me: boolean;
 };
 
@@ -149,17 +152,17 @@ function hydrateFeedPosts(
     author_id: string;
   }[],
   authors: Profile[],
-  likes: { post_id: string; user_id: string }[],
+  likes: { post_id: string; user_id: string; reaction: string }[],
   comments: { post_id: string }[],
   currentUserId: string,
   savedPostIds: Set<string> = new Set()
 ): FeedPost[] {
   const authorById = new Map(authors.map((a) => [a.id, a]));
-  const likesByPost = new Map<string, { count: number; mine: boolean }>();
+  const likesByPost = new Map<string, { count: number; myReaction: ReactionType | null }>();
   for (const l of likes) {
-    const cur = likesByPost.get(l.post_id) ?? { count: 0, mine: false };
+    const cur = likesByPost.get(l.post_id) ?? { count: 0, myReaction: null };
     cur.count += 1;
-    if (l.user_id === currentUserId) cur.mine = true;
+    if (l.user_id === currentUserId) cur.myReaction = l.reaction as ReactionType;
     likesByPost.set(l.post_id, cur);
   }
   const commentsByPost = new Map<string, number>();
@@ -171,7 +174,7 @@ function hydrateFeedPosts(
     .map((p) => {
       const author = authorById.get(p.author_id);
       if (!author) return null;
-      const likeInfo = likesByPost.get(p.id) ?? { count: 0, mine: false };
+      const likeInfo = likesByPost.get(p.id) ?? { count: 0, myReaction: null };
       return {
         id: p.id,
         text: p.text,
@@ -187,7 +190,8 @@ function hydrateFeedPosts(
         author,
         like_count: likeInfo.count,
         comment_count: commentsByPost.get(p.id) ?? 0,
-        liked_by_me: likeInfo.mine,
+        liked_by_me: likeInfo.myReaction !== null,
+        my_reaction: likeInfo.myReaction,
         saved_by_me: savedPostIds.has(p.id),
       };
     })
@@ -208,7 +212,7 @@ export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> 
 
   const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
     listSavedPostIds(currentUserId),
   ]);
@@ -236,7 +240,7 @@ export async function listVideoPosts(currentUserId: string): Promise<FeedPost[]>
 
   const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
     listSavedPostIds(currentUserId),
   ]);
@@ -269,7 +273,7 @@ export async function searchPeopleAndPosts(
   const postIds = posts.map((p) => p.id);
   const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
     listSavedPostIds(currentUserId),
   ]);
@@ -289,6 +293,7 @@ export type Comment = {
   author: Profile;
   like_count: number;
   liked_by_me: boolean;
+  my_reaction: ReactionType | null;
   replies: Comment[];
 };
 
@@ -305,14 +310,14 @@ export async function listComments(postId: string, currentUserId?: string): Prom
   const authorIds = [...new Set(comments.map((c) => c.author_id))];
   const [{ data: authors }, { data: likes }] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("comment_likes").select("comment_id, user_id").in("comment_id", commentIds),
+    supabase.from("comment_likes").select("comment_id, user_id, reaction").in("comment_id", commentIds),
   ]);
   const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
-  const likesByComment = new Map<string, { count: number; mine: boolean }>();
+  const likesByComment = new Map<string, { count: number; myReaction: ReactionType | null }>();
   for (const l of likes ?? []) {
-    const cur = likesByComment.get(l.comment_id) ?? { count: 0, mine: false };
+    const cur = likesByComment.get(l.comment_id) ?? { count: 0, myReaction: null };
     cur.count += 1;
-    if (l.user_id === currentUserId) cur.mine = true;
+    if (l.user_id === currentUserId) cur.myReaction = l.reaction as ReactionType;
     likesByComment.set(l.comment_id, cur);
   }
 
@@ -320,7 +325,7 @@ export async function listComments(postId: string, currentUserId?: string): Prom
   for (const c of comments) {
     const author = authorById.get(c.author_id);
     if (!author) continue;
-    const likeInfo = likesByComment.get(c.id) ?? { count: 0, mine: false };
+    const likeInfo = likesByComment.get(c.id) ?? { count: 0, myReaction: null };
     byId.set(c.id, {
       id: c.id,
       post_id: c.post_id,
@@ -329,7 +334,8 @@ export async function listComments(postId: string, currentUserId?: string): Prom
       created_at: c.created_at,
       author,
       like_count: likeInfo.count,
-      liked_by_me: likeInfo.mine,
+      liked_by_me: likeInfo.myReaction !== null,
+      my_reaction: likeInfo.myReaction,
       replies: [],
     });
   }
@@ -358,6 +364,16 @@ export async function toggleCommentLike(commentId: string, userId: string, curre
   }
 }
 
+export async function setCommentReaction(commentId: string, userId: string, reaction: ReactionType | null) {
+  if (reaction === null) {
+    const { error } = await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", userId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from("comment_likes").upsert({ comment_id: commentId, user_id: userId, reaction }, { onConflict: "comment_id,user_id" });
+  if (error) throw error;
+}
+
 export async function toggleLike(postId: string, userId: string, currentlyLiked: boolean) {
   if (currentlyLiked) {
     const { error } = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", userId);
@@ -367,6 +383,17 @@ export async function toggleLike(postId: string, userId: string, currentlyLiked:
     if (error) throw error;
     notifyPostAction(postId, userId, "like").catch(() => {});
   }
+}
+
+export async function setPostReaction(postId: string, userId: string, reaction: ReactionType | null) {
+  if (reaction === null) {
+    const { error } = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", userId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from("post_likes").upsert({ post_id: postId, user_id: userId, reaction }, { onConflict: "post_id,user_id" });
+  if (error) throw error;
+  notifyPostAction(postId, userId, "like").catch(() => {});
 }
 
 export async function listSavedPostIds(userId: string): Promise<Set<string>> {
@@ -403,7 +430,7 @@ export async function listSavedPosts(userId: string): Promise<FeedPost[]> {
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
   const [{ data: authors }, { data: likes }, { data: comments }] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
   ]);
 
@@ -431,7 +458,7 @@ export async function listLikedPosts(userId: string): Promise<FeedPost[]> {
   const authorIds = [...new Set(posts.map((p) => p.author_id))];
   const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
     listSavedPostIds(userId),
   ]);
@@ -1865,7 +1892,7 @@ export async function listCommunityPosts(communityId: string, currentUserId: str
   const postIds = posts.map((p) => p.id);
   const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
     supabase.from("profiles").select("*").in("id", authorIds),
-    supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
     supabase.from("post_comments").select("post_id").in("post_id", postIds),
     listSavedPostIds(currentUserId),
   ]);
