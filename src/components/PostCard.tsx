@@ -1,15 +1,18 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, ThumbsUp, Send, Loader2, Play, Bookmark, X } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, ThumbsUp, Send, Loader2, Play, Bookmark, X, Check } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { ReportModal } from "./ReportModal";
 import { useAuth } from "../context/AuthContext";
 import {
   addComment,
+  deleteComment,
+  deletePost,
   listComments,
   setCommentReaction,
   setPostReaction,
   toggleSavePost,
+  updatePost,
   type Comment,
   type FeedPost,
   type ReactionType,
@@ -31,6 +34,7 @@ function reactionMeta(type: ReactionType | null) {
 export function PostCard({ post }: { post: FeedPost }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isOwner = user?.id === post.author.id;
   const [myReaction, setMyReaction] = useState<ReactionType | null>(post.my_reaction);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
@@ -42,6 +46,12 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
+  const [text, setText] = useState(post.text);
+  const [editedAt, setEditedAt] = useState(post.edited_at);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(post.text);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleted, setDeleted] = useState(false);
 
   const handleReact = async (next: ReactionType | null) => {
     if (!user) return;
@@ -107,6 +117,48 @@ export function PostCard({ post }: { post: FeedPost }) {
     }
   };
 
+  const handleDeleteComment = async (comment: Comment) => {
+    if (!window.confirm("Delete this comment?")) return;
+    try {
+      await deleteComment(comment.id);
+      setComments((cur) => {
+        if (!cur) return cur;
+        const next = removeCommentFromTree(cur, comment.id);
+        setCommentCount(countComments(next));
+        return next;
+      });
+    } catch {
+      // leave the comment in place if the delete failed
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    const trimmed = editText.trim();
+    if (!trimmed || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      await updatePost(post.id, trimmed);
+      setText(trimmed);
+      setEditedAt(new Date().toISOString());
+      setEditing(false);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeletePost = async () => {
+    setMenuOpen(false);
+    if (!window.confirm("Delete this post? This can't be undone.")) return;
+    try {
+      await deletePost(post.id);
+      setDeleted(true);
+    } catch {
+      // leave the post in place if the delete failed
+    }
+  };
+
+  if (deleted) return null;
+
   return (
     <article className="border-b-8 border-void-2 pb-3 animate-rise">
       <div className="flex items-center gap-3 px-4 pt-4">
@@ -120,6 +172,7 @@ export function PostCard({ post }: { post: FeedPost }) {
           </div>
           <p className="flex items-center gap-1 text-[11px] text-mist">
             {timeAgo(post.created_at)}
+            {editedAt && <span>· edited</span>}
             {post.author.location && (
               <>
                 <span>·</span>
@@ -140,22 +193,71 @@ export function PostCard({ post }: { post: FeedPost }) {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-2xl glass-strong py-1">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setReportOpen(true);
-                  }}
-                  className="w-full px-4 py-2.5 text-left text-[13px] font-medium text-rose-400 hover:bg-white/5"
-                >
-                  Report post
-                </button>
+                {isOwner ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setEditText(text);
+                        setEditing(true);
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-[13px] font-medium text-ink hover:bg-white/5"
+                    >
+                      Edit post
+                    </button>
+                    <button
+                      onClick={handleDeletePost}
+                      className="w-full px-4 py-2.5 text-left text-[13px] font-medium text-rose-400 hover:bg-white/5"
+                    >
+                      Delete post
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setReportOpen(true);
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-[13px] font-medium text-rose-400 hover:bg-white/5"
+                  >
+                    Report post
+                  </button>
+                )}
               </div>
             </>
           )}
         </div>
       </div>
 
-      {post.text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{post.text}</p>}
+      {editing ? (
+        <div className="px-4 pt-3">
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            rows={3}
+            autoFocus
+            className="w-full resize-none rounded-2xl chip px-3.5 py-2.5 text-[13.5px] leading-relaxed text-ink focus:outline-none"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-full px-3.5 py-1.5 text-[12.5px] font-medium text-mist hover:text-ink"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={savingEdit || !editText.trim()}
+              className="flex items-center gap-1.5 rounded-full grad-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50"
+            >
+              {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        text && <p className="whitespace-pre-line px-4 pt-3 text-[13.5px] leading-relaxed text-ink/95">{text}</p>
+      )}
 
       {post.video_url && (
         <button
@@ -212,7 +314,15 @@ export function PostCard({ post }: { post: FeedPost }) {
           ) : (
             <div className="no-scrollbar max-h-72 space-y-3 overflow-y-auto pr-0.5">
               {comments.map((c) => (
-                <CommentRow key={c.id} comment={c} depth={0} onReact={handleCommentReact} onReply={setReplyingTo} />
+                <CommentRow
+                  key={c.id}
+                  comment={c}
+                  depth={0}
+                  currentUserId={user?.id}
+                  onReact={handleCommentReact}
+                  onReply={setReplyingTo}
+                  onDelete={handleDeleteComment}
+                />
               ))}
             </div>
           )}
@@ -331,13 +441,17 @@ function ReactButton({
 function CommentRow({
   comment,
   depth,
+  currentUserId,
   onReact,
   onReply,
+  onDelete,
 }: {
   comment: Comment;
   depth: number;
+  currentUserId: string | undefined;
   onReact: (c: Comment, next: ReactionType | null) => void;
   onReply: (target: { id: string; name: string }) => void;
+  onDelete: (c: Comment) => void;
 }) {
   return (
     <div className={depth > 0 ? "ml-9" : ""}>
@@ -354,13 +468,18 @@ function CommentRow({
             <button onClick={() => onReply({ id: comment.id, name: comment.author.name })} className="hover:text-ink">
               Reply
             </button>
+            {currentUserId === comment.author.id && (
+              <button onClick={() => onDelete(comment)} className="hover:text-rose-400">
+                Delete
+              </button>
+            )}
           </div>
         </div>
       </div>
       {comment.replies.length > 0 && (
         <div className="mt-2.5 space-y-2.5">
           {comment.replies.map((r) => (
-            <CommentRow key={r.id} comment={r} depth={depth + 1} onReact={onReact} onReply={onReply} />
+            <CommentRow key={r.id} comment={r} depth={depth + 1} currentUserId={currentUserId} onReact={onReact} onReply={onReply} onDelete={onDelete} />
           ))}
         </div>
       )}
@@ -378,6 +497,10 @@ function updateCommentTree(list: Comment[], id: string, updater: (c: Comment) =>
     if (c.replies.length > 0) return { ...c, replies: updateCommentTree(c.replies, id, updater) };
     return c;
   });
+}
+
+function removeCommentFromTree(list: Comment[], id: string): Comment[] {
+  return list.filter((c) => c.id !== id).map((c) => ({ ...c, replies: removeCommentFromTree(c.replies, id) }));
 }
 
 function formatVideoDuration(sec: number) {

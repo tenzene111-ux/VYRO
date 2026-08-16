@@ -50,6 +50,7 @@ export type FeedPost = {
   remix_type: "duet" | "stitch" | null;
   remix_of_post_id: string | null;
   created_at: string;
+  edited_at: string | null;
   author: Profile;
   like_count: number;
   comment_count: number;
@@ -104,6 +105,21 @@ export async function createPost(authorId: string, text: string, imageUrl?: stri
   if (error) throw error;
 }
 
+export async function updatePost(postId: string, text: string) {
+  const { error } = await supabase.from("posts").update({ text, edited_at: new Date().toISOString() }).eq("id", postId);
+  if (error) throw error;
+}
+
+export async function deletePost(postId: string) {
+  const { error } = await supabase.from("posts").delete().eq("id", postId);
+  if (error) throw error;
+}
+
+export async function deleteComment(commentId: string) {
+  const { error } = await supabase.from("post_comments").delete().eq("id", commentId);
+  if (error) throw error;
+}
+
 export async function createVideoPost(
   authorId: string,
   params: {
@@ -149,6 +165,7 @@ function hydrateFeedPosts(
     remix_type: string | null;
     remix_of_post_id: string | null;
     created_at: string;
+    edited_at: string | null;
     author_id: string;
   }[],
   authors: Profile[],
@@ -187,6 +204,7 @@ function hydrateFeedPosts(
         remix_type: p.remix_type as "duet" | "stitch" | null,
         remix_of_post_id: p.remix_of_post_id,
         created_at: p.created_at,
+        edited_at: p.edited_at,
         author,
         like_count: likeInfo.count,
         comment_count: commentsByPost.get(p.id) ?? 0,
@@ -201,7 +219,7 @@ function hydrateFeedPosts(
 export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> {
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -228,7 +246,7 @@ export async function listTopPosts(currentUserId: string, limit = 5): Promise<Fe
 export async function listVideoPosts(currentUserId: string): Promise<FeedPost[]> {
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
     .not("video_url", "is", null)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -259,7 +277,7 @@ export async function searchPeopleAndPosts(
     supabase.from("profiles").select("*").or(`name.ilike.%${q}%,username.ilike.%${q}%`).neq("id", currentUserId).limit(20),
     supabase
       .from("posts")
-      .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+      .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
       .ilike("text", `%${q}%`)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -423,7 +441,7 @@ export async function listSavedPosts(userId: string): Promise<FeedPost[]> {
   const postIds = saved.map((s) => s.post_id);
   const { data: posts } = await supabase
     .from("posts")
-    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
     .in("id", postIds);
   if (!posts || posts.length === 0) return [];
 
@@ -451,7 +469,7 @@ export async function listLikedPosts(userId: string): Promise<FeedPost[]> {
   const postIds = liked.map((l) => l.post_id);
   const { data: posts } = await supabase
     .from("posts")
-    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
     .in("id", postIds);
   if (!posts || posts.length === 0) return [];
 
@@ -1881,7 +1899,7 @@ export async function listCommunityMembers(communityId: string): Promise<(Profil
 export async function listCommunityPosts(communityId: string, currentUserId: string): Promise<FeedPost[]> {
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, author_id")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
     .eq("community_id", communityId)
     .order("created_at", { ascending: false })
     .limit(50);

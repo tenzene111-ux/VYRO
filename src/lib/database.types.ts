@@ -66,6 +66,7 @@ export type Database = {
           remix_of_post_id: string | null;
           community_id: string | null;
           created_at: string;
+          edited_at: string | null;
         };
         Insert: {
           id?: string;
@@ -81,6 +82,7 @@ export type Database = {
           remix_of_post_id?: string | null;
           community_id?: string | null;
           created_at?: string;
+          edited_at?: string | null;
         };
         Update: {
           id?: string;
@@ -96,6 +98,7 @@ export type Database = {
           remix_of_post_id?: string | null;
           community_id?: string | null;
           created_at?: string;
+          edited_at?: string | null;
         };
         Relationships: [];
       };

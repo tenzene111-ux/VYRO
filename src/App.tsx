@@ -12,13 +12,14 @@ import { Splash } from "./screens/Splash";
 import { Login } from "./screens/Login";
 import { Signup } from "./screens/Signup";
 import { Onboarding } from "./screens/Onboarding";
-import { Home } from "./screens/Home";
-import { Explore } from "./screens/Explore";
-import { Profile } from "./screens/Profile";
-import { Notifications } from "./screens/Notifications";
 
-import { ChatShell } from "./screens/chat/ChatShell";
-import { ChatList } from "./screens/chat/ChatList";
+const Home = lazy(() => import("./screens/Home").then((m) => ({ default: m.Home })));
+const Explore = lazy(() => import("./screens/Explore").then((m) => ({ default: m.Explore })));
+const Profile = lazy(() => import("./screens/Profile").then((m) => ({ default: m.Profile })));
+const Notifications = lazy(() => import("./screens/Notifications").then((m) => ({ default: m.Notifications })));
+
+const ChatShell = lazy(() => import("./screens/chat/ChatShell").then((m) => ({ default: m.ChatShell })));
+const ChatList = lazy(() => import("./screens/chat/ChatList").then((m) => ({ default: m.ChatList })));
 
 const CreatePost = lazy(() => import("./screens/CreatePost").then((m) => ({ default: m.CreatePost })));
 const CreateGroup = lazy(() => import("./screens/CreateGroup").then((m) => ({ default: m.CreateGroup })));

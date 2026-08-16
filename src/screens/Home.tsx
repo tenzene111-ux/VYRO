@@ -1,11 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, Bell, Plus, Loader2, Clapperboard, MessageSquare, Pencil } from "lucide-react";
+import { Search, Bell, Plus, Clapperboard, MessageSquare, Pencil } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
 import { useAuth, type Profile } from "../context/AuthContext";
-import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
+import {
+  listFeedPosts,
+  listActiveStories,
+  listSeenStoryIds,
+  listFollowing,
+  listProfiles,
+  toggleFollow,
+  type FeedPost,
+  type StoryWithAuthor,
+} from "../lib/api";
 import { rankForYou, filterFollowing } from "../lib/ranking";
 
 type Tab = "forYou" | "following" | "trending";
@@ -22,6 +31,7 @@ export function Home() {
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>("forYou");
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
+  const [suggested, setSuggested] = useState<Profile[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -37,7 +47,20 @@ export function Home() {
       }
       setStoryAuthors([...byAuthor.values()]);
     });
+    Promise.all([listProfiles(user.id), listFollowing(user.id)]).then(([profiles, following]) => {
+      setSuggested(profiles.filter((p) => !following.has(p.id)).slice(0, 8));
+    });
   }, [user]);
+
+  const handleFollowSuggested = async (targetId: string) => {
+    if (!user) return;
+    setSuggested((prev) => prev.filter((p) => p.id !== targetId));
+    try {
+      await toggleFollow(user.id, targetId, false);
+    } catch {
+      // leave it removed from the list; user can re-follow from Explore if this failed
+    }
+  };
 
   const tabFiltered =
     allPosts === null
@@ -88,6 +111,29 @@ export function Home() {
         ))}
       </div>
 
+      {suggested.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-[12.5px] font-semibold text-mist">People you may know</p>
+          <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
+            {suggested.map((p) => (
+            <div key={p.id} className="flex w-24 shrink-0 flex-col items-center gap-1.5 rounded-2xl glass-card p-3 text-center">
+              <button onClick={() => navigate(`/profile/${p.id}`)} className="flex flex-col items-center gap-1.5">
+                <Avatar name={p.name} avatarUrl={p.avatar_url} size={48} />
+                <span className="w-full truncate text-[11.5px] font-semibold text-ink">{p.name.split(" ")[0]}</span>
+                <span className="w-full truncate text-[10px] text-mist">@{p.username}</span>
+              </button>
+              <button
+                onClick={() => handleFollowSuggested(p.id)}
+                className="mt-0.5 w-full rounded-full grad-purple-blue py-1 text-[11px] font-semibold text-white"
+              >
+                Follow
+              </button>
+            </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="no-scrollbar -mx-4 mb-4 flex gap-5 overflow-x-auto px-4">
         {TABS.map((t) => (
           <button
@@ -119,8 +165,10 @@ export function Home() {
 
       <div className="relative">
         {posts === null ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-5 w-5 animate-spin text-mist" />
+          <div className="-mx-4 flex flex-col">
+            <PostSkeleton />
+            <PostSkeleton />
+            <PostSkeleton />
           </div>
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
@@ -158,5 +206,29 @@ function IconBtn({ children, onClick, dot }: { children: React.ReactNode; onClic
       {children}
       {dot && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-magenta ring-2 ring-void" />}
     </button>
+  );
+}
+
+function PostSkeleton() {
+  return (
+    <div className="animate-pulse border-b-8 border-void-2 px-4 pb-4 pt-4">
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 shrink-0 rounded-full bg-white/5" />
+        <div className="flex-1 space-y-1.5">
+          <div className="h-3 w-32 rounded-full bg-white/5" />
+          <div className="h-2.5 w-20 rounded-full bg-white/5" />
+        </div>
+      </div>
+      <div className="mt-3 space-y-1.5">
+        <div className="h-3 w-full rounded-full bg-white/5" />
+        <div className="h-3 w-3/4 rounded-full bg-white/5" />
+      </div>
+      <div className="mt-3 h-52 w-full rounded-2xl bg-white/5" />
+      <div className="mt-3 flex gap-4">
+        <div className="h-4 w-10 rounded-full bg-white/5" />
+        <div className="h-4 w-10 rounded-full bg-white/5" />
+        <div className="h-4 w-10 rounded-full bg-white/5" />
+      </div>
+    </div>
   );
 }
