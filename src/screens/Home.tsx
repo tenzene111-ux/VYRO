@@ -40,7 +40,7 @@ export function Home() {
   const [tab, setTab] = useState<Tab>("forYou");
   const [followingMode, setFollowingMode] = useState<FollowingMode>("latest");
   const [newFollowingCount, setNewFollowingCount] = useState(0);
-  const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
+  const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean; previewImageUrl: string | null }[]>([]);
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [interestProfile, setInterestProfile] = useState<Record<string, number>>({});
   const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
@@ -57,12 +57,14 @@ export function Home() {
       .catch(() => setInterestProfile({}));
     listTrendingHashtags().then(setTrendingHashtags).catch(() => setTrendingHashtags([]));
     Promise.all([listActiveStories(), listSeenStoryIds(user.id)]).then(([stories, seenIds]) => {
-      const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean }>();
+      const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean; previewImageUrl: string | null }>();
       for (const s of stories) {
         const existing = byAuthor.get(s.author.id);
         const seen = seenIds.has(s.id);
-        if (!existing) byAuthor.set(s.author.id, { author: s.author, seen });
-        else byAuthor.set(s.author.id, { author: s.author, seen: existing.seen && seen });
+        // stories arrive newest-first, so the first one seen per author is
+        // already their latest — that's the one whose photo should preview
+        if (!existing) byAuthor.set(s.author.id, { author: s.author, seen, previewImageUrl: s.image_url });
+        else byAuthor.set(s.author.id, { ...existing, seen: existing.seen && seen });
       }
       setStoryAuthors([...byAuthor.values()]);
     });
@@ -161,13 +163,18 @@ export function Home() {
           </span>
           <span className="text-[11px] text-mist">Your Story</span>
         </button>
-        {storyAuthors.map(({ author, seen }) => (
+        {storyAuthors.map(({ author, seen, previewImageUrl }) => (
           <button
             key={author.id}
             onClick={() => navigate(`/stories/${author.id}`)}
             className="flex w-16 shrink-0 flex-col items-center gap-1.5"
           >
-            <Avatar name={author.name} avatarUrl={author.avatar_url} size={54} ring={seen ? "story-seen" : "story"} />
+            <Avatar
+              name={author.name}
+              avatarUrl={previewImageUrl ?? author.avatar_url}
+              size={54}
+              ring={seen ? "story-seen" : "story"}
+            />
             <span className="w-16 truncate text-center text-[11px] text-mist">{author.name.split(" ")[0]}</span>
           </button>
         ))}
