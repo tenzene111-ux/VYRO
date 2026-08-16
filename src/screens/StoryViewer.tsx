@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { X, Send, Heart, Loader2 } from "lucide-react";
+import { X, Send, Loader2, Eye } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { gradientFor } from "../lib/gradients";
 import { useAuth } from "../context/AuthContext";
-import { getOrCreateConversationWith, listActiveStories, recordStoryView, sendMessage, type StoryWithAuthor } from "../lib/api";
+import {
+  getOrCreateConversationWith,
+  listActiveStories,
+  recordStoryView,
+  sendStoryReply,
+  listStoryViewers,
+  type StoryWithAuthor,
+  type StoryViewer as StoryViewerRow,
+} from "../lib/api";
 
 const DURATION = 5000;
+const QUICK_REACTIONS = ["❤️", "🔥", "😂", "😮", "👏", "😢"];
 
 export function StoryViewer() {
   const { userId } = useParams();
@@ -18,6 +27,8 @@ export function StoryViewer() {
   const [paused, setPaused] = useState(false);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [viewersOpen, setViewersOpen] = useState(false);
+  const [viewers, setViewers] = useState<StoryViewerRow[] | null>(null);
 
   useEffect(() => {
     listActiveStories().then((all) => {
@@ -64,6 +75,7 @@ export function StoryViewer() {
 
   const current = items[index];
   const author = current.author;
+  const isMine = user?.id === author.id;
 
   const goPrev = () => {
     if (index > 0) {
@@ -83,16 +95,28 @@ export function StoryViewer() {
     setSending(true);
     try {
       const conversationId = await getOrCreateConversationWith(user.id, author.id);
-      await sendMessage(conversationId, user.id, text.trim());
+      const previewText = current.caption || (current.video_url ? "🎬 Video" : "📷 Photo");
+      await sendStoryReply(conversationId, user.id, text.trim(), current.id, current.image_url, previewText);
       setReply("");
     } finally {
       setSending(false);
     }
   };
 
+  const handleOpenViewers = async () => {
+    setViewersOpen(true);
+    if (!viewers) setViewers(await listStoryViewers(current.id));
+  };
+
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-hidden bg-black">
-      <div className="absolute inset-0" style={{ background: gradientFor(current.id) }} />
+      {current.video_url ? (
+        <video src={current.video_url} className="absolute inset-0 h-full w-full object-cover" autoPlay muted={false} playsInline />
+      ) : current.image_url ? (
+        <img src={current.image_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <div className="absolute inset-0" style={{ background: gradientFor(current.id) }} />
+      )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/70" />
 
       <div className="relative z-10 flex gap-1.5 px-3 pt-4 safe-top">
@@ -128,34 +152,87 @@ export function StoryViewer() {
       >
         <button className="absolute inset-y-0 left-0 z-20 w-1/3" onClick={goPrev} aria-label="Previous" />
         <button className="absolute inset-y-0 right-0 z-20 w-1/3" onClick={goNext} aria-label="Next" />
-        <p className="font-display text-2xl font-bold text-white drop-shadow-lg">{current.caption}</p>
+        {!current.image_url && !current.video_url && (
+          <p className="font-display text-2xl font-bold text-white drop-shadow-lg">{current.caption}</p>
+        )}
       </div>
 
-      <div className="relative z-10 flex items-center gap-2.5 px-3 pb-6 safe-bottom">
-        <div className="flex flex-1 items-center rounded-full border border-white/25 bg-white/10 px-4 py-2.5 backdrop-blur">
-          <input
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send(reply)}
-            placeholder={`Reply to ${author.name.split(" ")[0]}...`}
-            className="flex-1 bg-transparent text-sm text-white placeholder:text-white/60 focus:outline-none"
-          />
+      {(current.image_url || current.video_url) && current.caption && (
+        <p className="relative z-10 px-8 pb-2 text-center text-[14px] font-semibold text-white drop-shadow-lg">{current.caption}</p>
+      )}
+
+      {isMine && (
+        <button
+          onClick={handleOpenViewers}
+          className="relative z-10 mx-auto mb-3 flex items-center gap-1.5 rounded-full bg-black/35 px-3.5 py-1.5 text-[12px] font-medium text-white backdrop-blur"
+        >
+          <Eye className="h-3.5 w-3.5" /> Viewers
+        </button>
+      )}
+
+      {!isMine && (
+        <div className="relative z-10 flex items-center justify-center gap-2 px-3 pb-2">
+          {QUICK_REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => send(emoji)}
+              disabled={sending}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-lg backdrop-blur transition-transform active:scale-90 disabled:opacity-50"
+            >
+              {emoji}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={() => send("❤️")}
-          disabled={sending}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur transition-transform active:scale-95 disabled:opacity-50"
-        >
-          <Heart className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => send(reply)}
-          disabled={sending || !reply.trim()}
-          className="flex h-11 w-11 items-center justify-center rounded-full grad-primary text-white transition-transform active:scale-95 disabled:opacity-50"
-        >
-          <Send className="h-5 w-5" />
-        </button>
-      </div>
+      )}
+
+      {!isMine && (
+        <div className="relative z-10 flex items-center gap-2.5 px-3 pb-6 safe-bottom">
+          <div className="flex flex-1 items-center rounded-full border border-white/25 bg-white/10 px-4 py-2.5 backdrop-blur">
+            <input
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send(reply)}
+              placeholder={`Reply to ${author.name.split(" ")[0]}...`}
+              className="flex-1 bg-transparent text-sm text-white placeholder:text-white/60 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={() => send(reply)}
+            disabled={sending || !reply.trim()}
+            className="flex h-11 w-11 items-center justify-center rounded-full grad-primary text-white transition-transform active:scale-95 disabled:opacity-50"
+          >
+            <Send className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {viewersOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setViewersOpen(false)} />
+          <div className="fixed inset-x-4 bottom-10 z-50 mx-auto max-h-[55vh] max-w-[440px] overflow-y-auto rounded-3xl bg-black/85 p-3 backdrop-blur">
+            <p className="mb-2 px-1.5 py-1 text-[13px] font-semibold text-white">
+              {viewers ? `${viewers.length} viewer${viewers.length === 1 ? "" : "s"}` : "Viewers"}
+            </p>
+            {viewers === null ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-4 w-4 animate-spin text-white/60" />
+              </div>
+            ) : viewers.length === 0 ? (
+              <p className="px-2 py-4 text-center text-[12.5px] text-white/60">No views yet.</p>
+            ) : (
+              viewers.map((v) => (
+                <div key={v.profile.id} className="flex items-center gap-3 rounded-2xl px-2 py-2">
+                  <Avatar name={v.profile.name} avatarUrl={v.profile.avatar_url} size={34} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-medium text-white">{v.profile.name}</p>
+                  </div>
+                  <span className="shrink-0 text-[10.5px] text-white/50">{timeAgo(v.viewed_at)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

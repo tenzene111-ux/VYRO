@@ -477,6 +477,9 @@ export type Database = {
           location_lng: number | null;
           location_label: string | null;
           shared_profile_id: string | null;
+          story_id: string | null;
+          story_preview_image_url: string | null;
+          story_preview_text: string | null;
           created_at: string;
         };
         Insert: {
@@ -505,6 +508,9 @@ export type Database = {
           location_lng?: number | null;
           location_label?: string | null;
           shared_profile_id?: string | null;
+          story_id?: string | null;
+          story_preview_image_url?: string | null;
+          story_preview_text?: string | null;
           created_at?: string;
         };
         Update: {
@@ -533,6 +539,9 @@ export type Database = {
           location_lng?: number | null;
           location_label?: string | null;
           shared_profile_id?: string | null;
+          story_id?: string | null;
+          story_preview_image_url?: string | null;
+          story_preview_text?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -970,21 +979,27 @@ export type Database = {
         Row: {
           id: string;
           author_id: string;
-          caption: string;
+          caption: string | null;
+          image_url: string | null;
+          video_url: string | null;
           created_at: string;
           expires_at: string;
         };
         Insert: {
           id?: string;
           author_id: string;
-          caption: string;
+          caption?: string | null;
+          image_url?: string | null;
+          video_url?: string | null;
           created_at?: string;
           expires_at?: string;
         };
         Update: {
           id?: string;
           author_id?: string;
-          caption?: string;
+          caption?: string | null;
+          image_url?: string | null;
+          video_url?: string | null;
           created_at?: string;
           expires_at?: string;
         };

@@ -776,6 +776,21 @@ function Bubble({
             {messagePreviewText(repliedTo)}
           </button>
         )}
+        {message.story_id && !message.deleted_at && (
+          <div className={`mb-1.5 flex items-center gap-2 rounded-xl px-2 py-1.5 ${mine ? "bg-white/10" : "bg-black/10"}`}>
+            {message.story_preview_image_url ? (
+              <img src={message.story_preview_image_url} alt="" className="h-9 w-7 shrink-0 rounded-md object-cover" />
+            ) : (
+              <div className={`h-9 w-7 shrink-0 rounded-md ${mine ? "bg-white/15" : "bg-cyan-400/15"}`} />
+            )}
+            <div className="min-w-0">
+              <p className={`text-[10px] font-semibold ${mine ? "text-white/70" : "opacity-70"}`}>
+                {mine ? "Replied to their story" : "Replied to your story"}
+              </p>
+              <p className={`truncate text-[11px] ${mine ? "text-white/70" : "opacity-70"}`}>{message.story_preview_text}</p>
+            </div>
+          </div>
+        )}
         {message.deleted_at ? (
           <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
         ) : message.poll ? (

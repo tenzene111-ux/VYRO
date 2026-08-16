@@ -935,6 +935,9 @@ export type ChatMessage = {
   location_lng: number | null;
   location_label: string | null;
   shared_profile_id: string | null;
+  story_id: string | null;
+  story_preview_image_url: string | null;
+  story_preview_text: string | null;
   created_at: string;
   reactions: MessageReaction[];
   poll: Poll | null;
@@ -2000,7 +2003,9 @@ export async function setRsvp(eventId: string, userId: string, status: "going" |
 
 export type StoryWithAuthor = {
   id: string;
-  caption: string;
+  caption: string | null;
+  image_url: string | null;
+  video_url: string | null;
   created_at: string;
   author: Profile;
 };
@@ -2008,7 +2013,7 @@ export type StoryWithAuthor = {
 export async function listActiveStories(): Promise<StoryWithAuthor[]> {
   const { data: stories, error } = await supabase
     .from("stories")
-    .select("id, caption, created_at, author_id")
+    .select("id, caption, image_url, video_url, created_at, author_id")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -2022,13 +2027,15 @@ export async function listActiveStories(): Promise<StoryWithAuthor[]> {
     .map((s) => {
       const author = authorById.get(s.author_id);
       if (!author) return null;
-      return { id: s.id, caption: s.caption, created_at: s.created_at, author };
+      return { id: s.id, caption: s.caption, image_url: s.image_url, video_url: s.video_url, created_at: s.created_at, author };
     })
     .filter((s): s is StoryWithAuthor => s !== null);
 }
 
-export async function createStory(authorId: string, caption: string) {
-  const { error } = await supabase.from("stories").insert({ author_id: authorId, caption });
+export async function createStory(authorId: string, caption: string, imageUrl?: string, videoUrl?: string) {
+  const { error } = await supabase
+    .from("stories")
+    .insert({ author_id: authorId, caption: caption || null, image_url: imageUrl ?? null, video_url: videoUrl ?? null });
   if (error) throw error;
 }
 
@@ -2040,6 +2047,51 @@ export async function recordStoryView(storyId: string, viewerId: string) {
 export async function listSeenStoryIds(viewerId: string): Promise<Set<string>> {
   const { data } = await supabase.from("story_views").select("story_id").eq("viewer_id", viewerId);
   return new Set((data ?? []).map((v) => v.story_id));
+}
+
+export type StoryViewer = { profile: Profile; viewed_at: string };
+
+export async function listStoryViewers(storyId: string): Promise<StoryViewer[]> {
+  const { data: views, error } = await supabase
+    .from("story_views")
+    .select("viewer_id, viewed_at")
+    .eq("story_id", storyId)
+    .order("viewed_at", { ascending: false });
+  if (error) throw error;
+  if (!views || views.length === 0) return [];
+  const viewerIds = views.map((v) => v.viewer_id);
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", viewerIds);
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  return views
+    .map((v) => {
+      const profile = profileById.get(v.viewer_id);
+      return profile ? { profile, viewed_at: v.viewed_at } : null;
+    })
+    .filter((v): v is StoryViewer => v !== null);
+}
+
+// A story reply (including a quick-reaction tap) is a normal DM with a
+// story_id + a snapshot of the story's preview captured at send-time — the
+// `stories` row itself becomes unreadable via RLS once it expires, so the
+// reply needs its own copy to keep rendering a thumbnail/caption correctly.
+export async function sendStoryReply(
+  conversationId: string,
+  senderId: string,
+  text: string,
+  storyId: string,
+  storyPreviewImageUrl: string | null,
+  storyPreviewText: string | null
+) {
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    text,
+    story_id: storyId,
+    story_preview_image_url: storyPreviewImageUrl,
+    story_preview_text: storyPreviewText,
+  });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, text).catch(() => {});
 }
 
 // ---------- wallet / gifts ----------
