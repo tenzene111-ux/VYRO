@@ -246,29 +246,46 @@ export function LiveRoom() {
           });
         };
 
+        // The video grid is for co-hosts/battle opponents only — a plain viewer
+        // connects to the LiveKit room too (to subscribe to the host's stream)
+        // but never publishes a camera track, so gate grid membership on an
+        // actual subscribed video publication rather than mere room presence.
+        // Otherwise every viewer who tunes in silently claims a grid tile and
+        // splits the host's own video in half.
+        const hasSubscribedVideo = (participant: RemoteParticipant) =>
+          [...participant.trackPublications.values()].some((pub) => pub.kind === "video" && pub.isSubscribed);
+
         const addParticipant = (participant: RemoteParticipant) => {
           setRemoteIds((ids) => (ids.includes(participant.identity) ? ids : [...ids, participant.identity]));
         };
-
-        room.remoteParticipants.forEach(addParticipant);
-
-        room.on(RoomEvent.ParticipantConnected, addParticipant);
-        room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+        const removeParticipant = (participant: RemoteParticipant) => {
           setRemoteIds((ids) => ids.filter((i) => i !== participant.identity));
+        };
+
+        room.remoteParticipants.forEach((participant) => {
+          if (hasSubscribedVideo(participant)) addParticipant(participant);
+        });
+
+        room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+          removeParticipant(participant);
           (attachedEls.current.get(participant.identity) ?? []).forEach((el) => el.remove());
           attachedEls.current.delete(participant.identity);
           remoteContainers.current.delete(participant.identity);
         });
         room.on(
           RoomEvent.TrackSubscribed,
-          (_track: Track, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
-            addParticipant(participant);
+          (track: Track, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+            if (track.kind === "video") addParticipant(participant);
             requestAnimationFrame(attachAllPending);
           }
         );
-        room.on(RoomEvent.TrackUnsubscribed, (track: Track) => {
-          track.detach().forEach((el) => el.remove());
-        });
+        room.on(
+          RoomEvent.TrackUnsubscribed,
+          (track: Track, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+            track.detach().forEach((el) => el.remove());
+            if (track.kind === "video" && !hasSubscribedVideo(participant)) removeParticipant(participant);
+          }
+        );
 
         // retry-attach once more shortly after, to cover any race between container mount and track arrival
         setTimeout(attachAllPending, 300);
@@ -342,8 +359,13 @@ export function LiveRoom() {
       const key = Date.now() + Math.random();
       setGifts((g) => [...g.slice(-4), { ...event, key }]);
       setTimeout(() => setGifts((g) => g.filter((x) => x.key !== key)), 5000);
+      // the coins already landed server-side the moment send_gift() ran —
+      // this just brings the host's own cached balance (from AuthContext) in
+      // sync so it doesn't look like the gift never arrived
+      if (isHostRef.current) refreshProfile();
     });
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveId, live?.id, streamEnded]);
 
   // ---------- follow state ----------
