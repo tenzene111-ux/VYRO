@@ -481,6 +481,7 @@ export type Database = {
           story_preview_image_url: string | null;
           story_preview_text: string | null;
           topic_id: string | null;
+          sticker_emoji: string | null;
           created_at: string;
         };
         Insert: {
@@ -513,6 +514,7 @@ export type Database = {
           story_preview_image_url?: string | null;
           story_preview_text?: string | null;
           topic_id?: string | null;
+          sticker_emoji?: string | null;
           created_at?: string;
         };
         Update: {
@@ -545,6 +547,7 @@ export type Database = {
           story_preview_image_url?: string | null;
           story_preview_text?: string | null;
           topic_id?: string | null;
+          sticker_emoji?: string | null;
           created_at?: string;
         };
         Relationships: [];

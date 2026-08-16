@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, Plus } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, Plus, Sticker } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -12,6 +12,7 @@ import { ChatLocationBubble } from "../../components/ChatLocationBubble";
 import { ChatContactBubble } from "../../components/ChatContactBubble";
 import { ContactPickerSheet } from "../../components/ContactPickerSheet";
 import { AttachMenu } from "../../components/AttachMenu";
+import { StickerPicker } from "../../components/StickerPicker";
 import { CreateTopicSheet } from "../../components/CreateTopicSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
@@ -29,6 +30,7 @@ import {
   sendPollMessage,
   sendLocationMessage,
   sendContactMessage,
+  sendStickerMessage,
   votePoll,
   closePoll,
   sendEncryptedGroupMessage,
@@ -102,6 +104,7 @@ export function GroupChat() {
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
   const [topics, setTopics] = useState<GroupTopic[]>([]);
   const [activeTopic, setActiveTopic] = useState<string | null>(null);
   const [topicSheetOpen, setTopicSheetOpen] = useState(false);
@@ -371,6 +374,13 @@ export function GroupChat() {
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
     await sendContactMessage(group.conversation_id, user.id, contact.id, replyToId, topicFilterId);
+  };
+
+  const handleSendSticker = async (emoji: string) => {
+    if (!group?.conversation_id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendStickerMessage(group.conversation_id, user.id, emoji, replyToId, topicFilterId);
   };
 
   const handleVote = async (message: ChatMessage, optionIds: string[]) => {
@@ -720,6 +730,8 @@ export function GroupChat() {
                     <ChatMediaBubble message={m} mine={mine} />
                   ) : m.audio_url ? (
                     <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine={mine} />
+                  ) : m.sticker_emoji ? (
+                    <span className="block text-[64px] leading-none">{m.sticker_emoji}</span>
                   ) : (
                     <GroupMessageText message={m} groupKey={groupKey} />
                   )}
@@ -735,7 +747,7 @@ export function GroupChat() {
                     {!mine && <Avatar name={author?.name ?? "?"} avatarUrl={author?.avatar_url} size={32} />}
                     <div className="max-w-[75%]">
                       {!mine && <p className="mb-0.5 text-[11px] font-medium text-violet-300">{author?.name ?? "…"}</p>}
-                      <PressableBubble mine={mine} onLongPress={() => setActionMessage(m)}>
+                      <PressableBubble mine={mine} bare={!!m.sticker_emoji && !m.deleted_at} onLongPress={() => setActionMessage(m)}>
                         {bubbleInner}
                       </PressableBubble>
                     </div>
@@ -821,6 +833,14 @@ export function GroupChat() {
                 className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
               />
             </div>
+            {!input.trim() && (
+              <button
+                onClick={() => setStickerPickerOpen(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
+              >
+                <Sticker className="h-4.5 w-4.5" />
+              </button>
+            )}
           </>
         )}
         {input.trim() ? (
@@ -871,6 +891,8 @@ export function GroupChat() {
 
       {topicSheetOpen && <CreateTopicSheet onClose={() => setTopicSheetOpen(false)} onCreate={handleCreateTopic} />}
 
+      {stickerPickerOpen && <StickerPicker onClose={() => setStickerPickerOpen(false)} onPick={handleSendSticker} />}
+
       {forwardMessageTarget && (
         <>
           <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setForwardMessageTarget(null)} />
@@ -905,7 +927,17 @@ export function GroupChat() {
   );
 }
 
-function PressableBubble({ mine, onLongPress, children }: { mine: boolean; onLongPress: () => void; children: React.ReactNode }) {
+function PressableBubble({
+  mine,
+  bare,
+  onLongPress,
+  children,
+}: {
+  mine: boolean;
+  bare?: boolean;
+  onLongPress: () => void;
+  children: React.ReactNode;
+}) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPress = () => {
     pressTimer.current = setTimeout(onLongPress, 450);
@@ -919,8 +951,8 @@ function PressableBubble({ mine, onLongPress, children }: { mine: boolean; onLon
       onPointerUp={cancelPress}
       onPointerLeave={cancelPress}
       onContextMenu={(e) => e.preventDefault()}
-      className={`select-none rounded-3xl px-4 py-2.5 text-[13.5px] leading-relaxed ${
-        mine ? "grad-purple-blue text-white" : "chip text-ink"
+      className={`select-none rounded-3xl text-[13.5px] leading-relaxed ${
+        bare ? "bg-transparent px-1 py-1" : `px-4 py-2.5 ${mine ? "grad-purple-blue text-white" : "chip text-ink"}`
       }`}
     >
       {children}

@@ -647,7 +647,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
   const { data: lastMessages } = await supabase
     .from("messages")
     .select(
-      "conversation_id, sender_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, location_lat, shared_profile_id, deleted_at, created_at"
+      "conversation_id, sender_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, location_lat, shared_profile_id, sticker_emoji, deleted_at, created_at"
     )
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
@@ -939,6 +939,7 @@ export type ChatMessage = {
   story_preview_image_url: string | null;
   story_preview_text: string | null;
   topic_id: string | null;
+  sticker_emoji: string | null;
   created_at: string;
   reactions: MessageReaction[];
   poll: Poll | null;
@@ -948,7 +949,7 @@ export type ChatMessage = {
 export function messagePreviewText(
   m: Pick<
     ChatMessage,
-    "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at" | "location_lat" | "shared_profile_id"
+    "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at" | "location_lat" | "shared_profile_id" | "sticker_emoji"
   > & {
     poll?: Pick<Poll, "question"> | null;
     poll_id?: string | null;
@@ -957,6 +958,7 @@ export function messagePreviewText(
 ): string {
   if (m.deleted_at) return "This message was deleted";
   if (m.text) return m.text;
+  if (m.sticker_emoji) return `${m.sticker_emoji} Sticker`;
   if (m.poll) return `📊 ${m.poll.question}`;
   if (m.poll_id) return "📊 Poll";
   if (m.location_lat) return "📍 Location";
@@ -1072,6 +1074,20 @@ export async function sendContactMessage(
     .insert({ conversation_id: conversationId, sender_id: senderId, shared_profile_id: contactId, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "👤 Contact").catch(() => {});
+}
+
+export async function sendStickerMessage(
+  conversationId: string,
+  senderId: string,
+  emoji: string,
+  replyToId?: string,
+  topicId?: string | null
+) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, sticker_emoji: emoji, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, `${emoji} Sticker`).catch(() => {});
 }
 
 export async function sendPollMessage(
@@ -1217,6 +1233,7 @@ export async function deleteMessageForEveryone(messageId: string) {
       location_lng: null,
       location_label: null,
       shared_profile_id: null,
+      sticker_emoji: null,
       pinned: false,
       deleted_at: new Date().toISOString(),
     })

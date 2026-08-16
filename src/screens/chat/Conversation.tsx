@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark, Sticker } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -12,6 +12,7 @@ import { ChatLocationBubble } from "../../components/ChatLocationBubble";
 import { ChatContactBubble } from "../../components/ChatContactBubble";
 import { ContactPickerSheet } from "../../components/ContactPickerSheet";
 import { AttachMenu } from "../../components/AttachMenu";
+import { StickerPicker } from "../../components/StickerPicker";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
 import {
@@ -27,6 +28,7 @@ import {
   sendPollMessage,
   sendLocationMessage,
   sendContactMessage,
+  sendStickerMessage,
   votePoll,
   closePoll,
   forwardMessage,
@@ -95,6 +97,7 @@ export function Conversation() {
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -281,6 +284,13 @@ export function Conversation() {
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
     await sendContactMessage(id, user.id, contact.id, replyToId);
+  };
+
+  const handleSendSticker = async (emoji: string) => {
+    if (!id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendStickerMessage(id, user.id, emoji, replyToId);
   };
 
   const handleVote = async (message: ChatMessage, optionIds: string[]) => {
@@ -622,6 +632,14 @@ export function Conversation() {
                 className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
               />
             </div>
+            {!input.trim() && (
+              <button
+                onClick={() => setStickerPickerOpen(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
+              >
+                <Sticker className="h-4.5 w-4.5" />
+              </button>
+            )}
           </>
         )}
         {!voiceRecording && !input.trim() && messages && messages.length > 0 && (
@@ -678,6 +696,8 @@ export function Conversation() {
       )}
 
       {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}
+
+      {stickerPickerOpen && <StickerPicker onClose={() => setStickerPickerOpen(false)} onPick={handleSendSticker} />}
 
       {forwardMessageTarget && (
         <>
@@ -757,8 +777,10 @@ function Bubble({
         onPointerUp={cancelPress}
         onPointerLeave={cancelPress}
         onContextMenu={(e) => e.preventDefault()}
-        className={`max-w-[75%] select-none rounded-3xl px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-line ${
-          mine ? "grad-purple-blue text-white" : "chip text-ink"
+        className={`max-w-[75%] select-none rounded-3xl text-[13.5px] leading-relaxed whitespace-pre-line ${
+          message.sticker_emoji && !message.deleted_at
+            ? "bg-transparent px-1 py-1"
+            : `px-4 py-2.5 ${mine ? "grad-purple-blue text-white" : "chip text-ink"}`
         }`}
       >
         {message.forwarded && (
@@ -803,10 +825,12 @@ function Bubble({
           <ChatMediaBubble message={message} mine={mine} />
         ) : message.audio_url ? (
           <VoiceMessageBubble url={message.audio_url} duration={message.audio_duration_seconds ?? 0} mine={mine} />
+        ) : message.sticker_emoji ? (
+          <span className="block text-[64px] leading-none">{message.sticker_emoji}</span>
         ) : (
           <MessageText message={message} mine={mine} translateOn={translateOn} targetLang={targetLang} />
         )}
-        <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-mist"}`}>
+        <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${message.sticker_emoji && !message.deleted_at ? "text-mist" : mine ? "text-white/70" : "text-mist"}`}>
           {message.edited_at && !message.deleted_at && <span>edited ·</span>}
           {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           {mine && (read ? <CheckCheck className="h-3.5 w-3.5 text-cyan-300" /> : <Check className="h-3.5 w-3.5" />)}
