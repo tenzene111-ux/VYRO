@@ -63,3 +63,8 @@ export const categories: Category[] = [
 export function getCategory(id: string | undefined): Category | undefined {
   return categories.find((c) => c.id === id);
 }
+
+export function matchedCategoryIds(text: string): string[] {
+  const haystack = text.toLowerCase();
+  return categories.filter((c) => c.keywords.length > 0 && c.keywords.some((k) => haystack.includes(k))).map((c) => c.id);
+}

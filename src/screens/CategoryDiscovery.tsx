@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { PostCard } from "../components/PostCard";
 import { ShortVideoCard } from "../components/ShortVideoCard";
 import { useAuth } from "../context/AuthContext";
-import { getCategory } from "../lib/categories";
+import { getCategory, matchedCategoryIds } from "../lib/categories";
 import { listFeedPosts, type FeedPost } from "../lib/api";
 
 export function CategoryDiscovery() {
@@ -22,11 +22,7 @@ export function CategoryDiscovery() {
         setPosts([...all].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count)));
         return;
       }
-      const matched = all.filter((p) => {
-        const haystack = p.text.toLowerCase();
-        return category.keywords.some((k) => haystack.includes(k));
-      });
-      setPosts(matched);
+      setPosts(all.filter((p) => matchedCategoryIds(p.text).includes(category.id)));
     });
   }, [user, category]);
 

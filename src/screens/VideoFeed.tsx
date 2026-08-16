@@ -11,12 +11,16 @@ import {
   toggleSavePost,
   toggleFollow,
   isFollowing,
+  listFollowing,
   listLiveNow,
+  listMyWatchSignals,
+  listPostTexts,
   recordVideoWatch,
   type FeedPost,
   type Comment,
   type LiveSessionWithHost,
 } from "../lib/api";
+import { buildInterestProfile, diversify, rankForYou } from "../lib/ranking";
 
 export function VideoFeed() {
   const { postId } = useParams();
@@ -30,7 +34,13 @@ export function VideoFeed() {
 
   useEffect(() => {
     if (!user) return;
-    listVideoPosts(user.id).then(setPosts).catch(() => setPosts([]));
+    Promise.all([listVideoPosts(user.id), listFollowing(user.id), listMyWatchSignals(user.id)])
+      .then(async ([videoPosts, followingIds, signals]) => {
+        const textById = await listPostTexts(signals.map((s) => s.post_id));
+        const profile = buildInterestProfile(signals, textById);
+        setPosts(diversify(rankForYou(videoPosts, followingIds, user.id, profile)));
+      })
+      .catch(() => setPosts([]));
     listLiveNow(user.id).then(setLiveSessions).catch(() => setLiveSessions([]));
   }, [user]);
 
@@ -100,6 +110,8 @@ function VideoTile({
   const videoRef = useRef<HTMLVideoElement>(null);
   const tileRef = useRef<HTMLDivElement>(null);
   const maxWatchedRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const loopCountRef = useRef(0);
   const [liked, setLiked] = useState(post.liked_by_me);
   const [likeCount, setLikeCount] = useState(post.like_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
@@ -143,9 +155,15 @@ function VideoTile({
     }
     v.currentTime = 0;
     maxWatchedRef.current = 0;
+    lastTimeRef.current = 0;
+    loopCountRef.current = 0;
     setPaused(false);
     v.play().catch(() => {});
     const onTimeUpdate = () => {
+      // loop wraps currentTime back near 0 without firing "ended" — a backward
+      // jump this large is the video restarting, i.e. a replay.
+      if (v.currentTime < lastTimeRef.current - 1) loopCountRef.current += 1;
+      lastTimeRef.current = v.currentTime;
       maxWatchedRef.current = Math.max(maxWatchedRef.current, v.currentTime);
       setProgress(v.duration > 0 ? v.currentTime / v.duration : 0);
     };
@@ -153,7 +171,7 @@ function VideoTile({
     return () => {
       v.removeEventListener("timeupdate", onTimeUpdate);
       if (user && maxWatchedRef.current > 0.1) {
-        recordVideoWatch(post.id, user.id, maxWatchedRef.current, post.video_duration_seconds).catch(() => {});
+        recordVideoWatch(post.id, user.id, maxWatchedRef.current, post.video_duration_seconds, loopCountRef.current > 0).catch(() => {});
       }
     };
   }, [active, post.id, post.video_duration_seconds, user]);

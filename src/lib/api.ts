@@ -1207,7 +1207,8 @@ export async function recordVideoWatch(
   postId: string,
   viewerId: string,
   watchedSeconds: number,
-  durationSeconds: number | null
+  durationSeconds: number | null,
+  replayed = false
 ) {
   const { error } = await supabase.from("video_watch_events").insert({
     post_id: postId,
@@ -1215,8 +1216,34 @@ export async function recordVideoWatch(
     watched_seconds: watchedSeconds,
     video_duration_seconds: durationSeconds,
     completed: durationSeconds != null && watchedSeconds >= durationSeconds - 0.5,
+    replayed,
   });
   if (error) throw error;
+}
+
+export type WatchSignal = {
+  post_id: string;
+  watched_seconds: number;
+  video_duration_seconds: number | null;
+  completed: boolean;
+  replayed: boolean;
+};
+
+export async function listMyWatchSignals(userId: string, limit = 300): Promise<WatchSignal[]> {
+  const { data, error } = await supabase
+    .from("video_watch_events")
+    .select("post_id, watched_seconds, video_duration_seconds, completed, replayed")
+    .eq("viewer_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listPostTexts(postIds: string[]): Promise<Map<string, string>> {
+  if (postIds.length === 0) return new Map();
+  const { data } = await supabase.from("posts").select("id, text").in("id", [...new Set(postIds)]);
+  return new Map((data ?? []).map((p) => [p.id, p.text]));
 }
 
 export type VideoPostStat = {

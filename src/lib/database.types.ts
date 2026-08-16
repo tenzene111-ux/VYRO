@@ -335,6 +335,7 @@ export type Database = {
           watched_seconds: number;
           video_duration_seconds: number | null;
           completed: boolean;
+          replayed: boolean;
           created_at: string;
         };
         Insert: {
@@ -344,6 +345,7 @@ export type Database = {
           watched_seconds?: number;
           video_duration_seconds?: number | null;
           completed?: boolean;
+          replayed?: boolean;
           created_at?: string;
         };
         Update: {
@@ -353,6 +355,7 @@ export type Database = {
           watched_seconds?: number;
           video_duration_seconds?: number | null;
           completed?: boolean;
+          replayed?: boolean;
           created_at?: string;
         };
         Relationships: [];

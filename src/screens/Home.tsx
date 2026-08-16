@@ -10,12 +10,14 @@ import {
   listActiveStories,
   listSeenStoryIds,
   listFollowing,
+  listMyWatchSignals,
+  listPostTexts,
   listProfiles,
   toggleFollow,
   type FeedPost,
   type StoryWithAuthor,
 } from "../lib/api";
-import { rankForYou, filterFollowing } from "../lib/ranking";
+import { buildInterestProfile, diversify, rankForYou, filterFollowing } from "../lib/ranking";
 
 type Tab = "forYou" | "following" | "trending";
 const TABS: { id: Tab; label: string }[] = [
@@ -32,11 +34,18 @@ export function Home() {
   const [tab, setTab] = useState<Tab>("forYou");
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
   const [suggested, setSuggested] = useState<Profile[]>([]);
+  const [interestProfile, setInterestProfile] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!user) return;
     listFeedPosts(user.id).then(setAllPosts).catch(() => setAllPosts([]));
     listFollowing(user.id).then(setFollowingIds).catch(() => setFollowingIds(new Set()));
+    listMyWatchSignals(user.id)
+      .then(async (signals) => {
+        const textById = await listPostTexts(signals.map((s) => s.post_id));
+        setInterestProfile(buildInterestProfile(signals, textById));
+      })
+      .catch(() => setInterestProfile({}));
     Promise.all([listActiveStories(), listSeenStoryIds(user.id)]).then(([stories, seenIds]) => {
       const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean }>();
       for (const s of stories) {
@@ -66,7 +75,7 @@ export function Home() {
     allPosts === null
       ? null
       : tab === "forYou"
-      ? rankForYou(allPosts, followingIds, user?.id ?? "")
+      ? diversify(rankForYou(allPosts, followingIds, user?.id ?? "", interestProfile))
       : tab === "following"
       ? filterFollowing(allPosts, followingIds, user?.id ?? "")
       : [...allPosts].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count));
