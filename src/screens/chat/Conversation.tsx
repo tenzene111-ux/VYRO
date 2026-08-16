@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark, BarChart3 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
@@ -67,6 +67,7 @@ async function resolveMessageText(message: ChatMessage, mine: boolean): Promise<
 export function Conversation() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { startCall } = useCall();
   const [other, setOther] = useState<Profile | null>(null);
@@ -171,6 +172,17 @@ export function Conversation() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages.length]);
+
+  useEffect(() => {
+    const targetId = (location.state as { scrollToMessageId?: string } | null)?.scrollToMessageId;
+    if (!targetId || !messages?.some((m) => m.id === targetId)) return;
+    const timer = setTimeout(() => {
+      document.getElementById(`msg-${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    navigate(location.pathname, { replace: true, state: {} });
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   const handleInputChange = (value: string) => {
     setInput(value);

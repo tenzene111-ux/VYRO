@@ -678,6 +678,94 @@ export async function listConversations(userId: string): Promise<ChatConversatio
     .sort((a, b) => (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""));
 }
 
+export type MessageSearchHit = {
+  conversationId: string;
+  isGroup: boolean;
+  groupId: string | null;
+  title: string;
+  avatarUrl: string | null;
+  snippet: string;
+  messageId: string;
+  createdAt: string;
+};
+
+// Only plaintext text is searchable — encrypted messages (ciphertext) can't
+// be searched server-side without decrypting every one client-side, which
+// isn't practical for a search query. This is a disclosed limitation, same
+// trade-off as the rest of the app's E2E encryption.
+export async function searchMyMessages(userId: string, query: string, limit = 30): Promise<MessageSearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data: memberships } = await supabase.from("conversation_members").select("conversation_id").eq("user_id", userId);
+  const conversationIds = (memberships ?? []).map((m) => m.conversation_id);
+  if (conversationIds.length === 0) return [];
+
+  const { data: messages, error } = await supabase
+    .from("messages")
+    .select("id, conversation_id, text, created_at")
+    .in("conversation_id", conversationIds)
+    .is("deleted_at", null)
+    .ilike("text", `%${q}%`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  if (!messages || messages.length === 0) return [];
+
+  const hitConvIds = [...new Set(messages.map((m) => m.conversation_id))];
+  const { data: conversations } = await supabase.from("conversations").select("id, is_group, is_self").in("id", hitConvIds);
+  const convMetaById = new Map((conversations ?? []).map((c) => [c.id, c]));
+
+  const groupConvIds = hitConvIds.filter((id) => convMetaById.get(id)?.is_group);
+  const { data: groups } =
+    groupConvIds.length > 0
+      ? await supabase.from("groups").select("id, conversation_id, name").in("conversation_id", groupConvIds)
+      : { data: [] };
+  const groupByConv = new Map((groups ?? []).map((g) => [g.conversation_id, g]));
+
+  const otherConvIds = hitConvIds.filter((id) => !convMetaById.get(id)?.is_group);
+  const otherByConv = new Map<string, Profile | null>();
+  await Promise.all(
+    otherConvIds.map(async (id) => {
+      otherByConv.set(id, await getConversationOther(id, userId));
+    })
+  );
+
+  return messages.map((m) => {
+    const meta = convMetaById.get(m.conversation_id);
+    const isGroup = !!meta?.is_group;
+    const other = otherByConv.get(m.conversation_id);
+    const group = groupByConv.get(m.conversation_id);
+    const title = isGroup ? group?.name ?? "Group" : meta?.is_self ? "Saved Messages" : other?.name ?? "Chat";
+    return {
+      conversationId: m.conversation_id,
+      isGroup,
+      groupId: isGroup ? group?.id ?? null : null,
+      title,
+      avatarUrl: !isGroup && !meta?.is_self ? other?.avatar_url ?? null : null,
+      snippet: m.text ?? "",
+      messageId: m.id,
+      createdAt: m.created_at,
+    };
+  });
+}
+
+export async function searchGroups(userId: string, query: string, limit = 20): Promise<(Group & { isMember: boolean })[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data: memberships } = await supabase.from("group_members").select("group_id").eq("user_id", userId);
+  const myGroupIds = new Set((memberships ?? []).map((m) => m.group_id));
+
+  const { data, error } = await supabase
+    .from("groups")
+    .select("*")
+    .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
+    .limit(limit * 2);
+  if (error) throw error;
+  const visible = (data ?? []).filter((g) => g.privacy === "public" || myGroupIds.has(g.id)).slice(0, limit);
+  const withCounts = await attachMemberCounts(visible);
+  return withCounts.map((g) => ({ ...g, isMember: myGroupIds.has(g.id) }));
+}
+
 export async function getOrCreateSavedMessages(userId: string): Promise<string> {
   const { data: existing } = await supabase
     .from("conversation_members")

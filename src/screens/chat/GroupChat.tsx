@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, BarChart3 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
@@ -71,6 +71,7 @@ async function resolveGroupMessageText(message: ChatMessage, groupKey: CryptoKey
 export function GroupChat() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [group, setGroup] = useState<Group | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -241,6 +242,17 @@ export function GroupChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleMessages.length]);
+
+  useEffect(() => {
+    const targetId = (location.state as { scrollToMessageId?: string } | null)?.scrollToMessageId;
+    if (!targetId || !messages?.some((m) => m.id === targetId)) return;
+    const timer = setTimeout(() => {
+      document.getElementById(`gmsg-${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    navigate(location.pathname, { replace: true, state: {} });
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   const handleInputChange = (value: string) => {
     setInput(value);
