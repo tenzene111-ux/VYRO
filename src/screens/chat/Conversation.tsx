@@ -15,6 +15,7 @@ import { AttachMenu } from "../../components/AttachMenu";
 import { StickerPicker } from "../../components/StickerPicker";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
+import { useIsDesktop } from "../../lib/useIsDesktop";
 import {
   getConversationOther,
   listMessages,
@@ -78,6 +79,7 @@ export function Conversation() {
   const location = useLocation();
   const { user } = useAuth();
   const { startCall } = useCall();
+  const isDesktop = useIsDesktop();
   const [other, setOther] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -459,7 +461,13 @@ export function Conversation() {
   };
 
   return (
-    <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">
+    <div
+      className={
+        isDesktop
+          ? "fixed inset-y-0 left-[360px] right-0 z-20 flex flex-col border-l border-white/5 bg-vyro-radial"
+          : "fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial"
+      }
+    >
       <header className="flex items-center gap-3 border-b border-white/5 px-3 py-3 safe-top">
         <button onClick={() => navigate(-1)} className="rounded-full p-1.5 text-mist hover:text-ink">
           <ArrowLeft className="h-5 w-5" />

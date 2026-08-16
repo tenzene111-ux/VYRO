@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { MessageSquare, Phone, Users2, Users, Settings, ArrowLeft } from "lucide-react";
 import { Logo } from "../../components/Logo";
+import { useIsDesktop } from "../../lib/useIsDesktop";
 
 const tabs = [
   { to: "/chat", label: "Chats", icon: MessageSquare, end: true },
@@ -13,6 +14,20 @@ const tabs = [
 
 export function ChatShell() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
+
+  // on desktop the list itself lives in the persistent ChatDesktopRail
+  // (rendered alongside <Routes>, so it survives navigating into a
+  // conversation); this route's own content becomes an empty-state pane
+  // offset to the right of that rail.
+  if (isDesktop) {
+    return (
+      <div className="fixed inset-y-0 left-[360px] right-0 z-20 flex flex-col items-center justify-center gap-3 border-l border-white/5 bg-vyro-radial text-center">
+        <Logo size={40} withMark />
+        <p className="text-sm text-mist">Select a chat to start messaging</p>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">

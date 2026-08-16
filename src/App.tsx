@@ -20,6 +20,7 @@ const Notifications = lazy(() => import("./screens/Notifications").then((m) => (
 
 const ChatShell = lazy(() => import("./screens/chat/ChatShell").then((m) => ({ default: m.ChatShell })));
 const ChatList = lazy(() => import("./screens/chat/ChatList").then((m) => ({ default: m.ChatList })));
+const ChatDesktopRail = lazy(() => import("./components/ChatDesktopRail").then((m) => ({ default: m.ChatDesktopRail })));
 
 const CreatePost = lazy(() => import("./screens/CreatePost").then((m) => ({ default: m.CreatePost })));
 const CreateGroup = lazy(() => import("./screens/CreateGroup").then((m) => ({ default: m.CreateGroup })));
@@ -94,7 +95,14 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
 
-                <Route element={<RequireAuth><Outlet /></RequireAuth>}>
+                <Route
+                  element={
+                    <RequireAuth>
+                      <ChatDesktopRail />
+                      <Outlet />
+                    </RequireAuth>
+                  }
+                >
                   <Route path="/onboarding" element={<Onboarding />} />
 
                   <Route element={<Shell />}>

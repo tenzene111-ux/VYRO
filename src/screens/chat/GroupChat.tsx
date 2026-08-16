@@ -16,6 +16,7 @@ import { StickerPicker } from "../../components/StickerPicker";
 import { CreateTopicSheet } from "../../components/CreateTopicSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
+import { useIsDesktop } from "../../lib/useIsDesktop";
 import {
   getGroup,
   getMyGroupRole,
@@ -85,6 +86,7 @@ export function GroupChat() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   const [group, setGroup] = useState<Group | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
@@ -574,7 +576,13 @@ export function GroupChat() {
       : `${typingNames[0]}, ${typingNames[1]} and ${typingNames.length - 2} others are typing…`;
 
   return (
-    <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">
+    <div
+      className={
+        isDesktop
+          ? "fixed inset-y-0 left-[360px] right-0 z-20 flex flex-col border-l border-white/5 bg-vyro-radial"
+          : "fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial"
+      }
+    >
       <header className="flex items-center gap-3 border-b border-white/5 px-3 py-3 safe-top">
         <button onClick={() => navigate(-1)} className="rounded-full p-1.5 text-mist hover:text-ink">
           <ArrowLeft className="h-5 w-5" />
