@@ -13,6 +13,7 @@ export function PeopleTab() {
   const [people, setPeople] = useState<Profile[] | null>(null);
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [messaging, setMessaging] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -44,9 +45,12 @@ export function PeopleTab() {
   const handleMessage = async (targetId: string) => {
     if (!user) return;
     setMessaging(targetId);
+    setMessageError(null);
     try {
       const conversationId = await getOrCreateConversationWith(user.id, targetId);
       navigate(`/chat/${conversationId}`);
+    } catch {
+      setMessageError("Couldn't start the conversation. Try again.");
     } finally {
       setMessaging(null);
     }
@@ -73,6 +77,8 @@ export function PeopleTab() {
       {people.length === 0 && (
         <p className="py-16 text-center text-[13px] text-mist">No one else has joined VYRO yet.</p>
       )}
+
+      {messageError && <p className="pb-2 pt-1 text-center text-[12px] text-rose-400">{messageError}</p>}
 
       {followingList.length > 0 && (
         <Section title="Following">

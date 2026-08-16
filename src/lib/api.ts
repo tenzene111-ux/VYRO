@@ -658,16 +658,17 @@ export async function getOrCreateConversationWith(userId: string, otherUserId: s
     if (shared && shared.length > 0) return shared[0].conversation_id;
   }
 
-  const { data: conversation, error } = await supabase
-    .from("conversations")
-    .insert({ is_group: false })
-    .select("id")
-    .single();
-  if (error || !conversation) throw error ?? new Error("Failed to create conversation");
+  // Generate the id client-side instead of reading it back from the insert:
+  // the "view your conversations" RLS policy requires already being a member,
+  // which isn't true yet at this exact instant, so a chained .select() on the
+  // insert would come back empty and fail before membership rows even exist.
+  const conversationId = crypto.randomUUID();
+  const { error: convError } = await supabase.from("conversations").insert({ id: conversationId, is_group: false });
+  if (convError) throw convError;
 
   const { error: selfMemberError } = await supabase
     .from("conversation_members")
-    .insert({ conversation_id: conversation.id, user_id: userId });
+    .insert({ conversation_id: conversationId, user_id: userId });
   if (selfMemberError) throw selfMemberError;
 
   // Inserted as a separate statement after the row above: the "add another
@@ -676,10 +677,10 @@ export async function getOrCreateConversationWith(userId: string, otherUserId: s
   // see (both rows are evaluated against the same pre-insert snapshot).
   const { error: otherMemberError } = await supabase
     .from("conversation_members")
-    .insert({ conversation_id: conversation.id, user_id: otherUserId });
+    .insert({ conversation_id: conversationId, user_id: otherUserId });
   if (otherMemberError) throw otherMemberError;
 
-  return conversation.id;
+  return conversationId;
 }
 
 export type ChatMessage = {

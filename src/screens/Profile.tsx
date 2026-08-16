@@ -62,6 +62,8 @@ export function Profile() {
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
   const [followsMe, setFollowsMe] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const [tab, setTab] = useState("posts");
   const [editing, setEditing] = useState(false);
   const [gifting, setGifting] = useState(false);
@@ -112,9 +114,17 @@ export function Profile() {
   };
 
   const handleMessage = async () => {
-    if (!user || !targetId) return;
-    const conversationId = await getOrCreateConversationWith(user.id, targetId);
-    navigate(`/chat/${conversationId}`);
+    if (!user || !targetId || messaging) return;
+    setMessaging(true);
+    setMessageError(null);
+    try {
+      const conversationId = await getOrCreateConversationWith(user.id, targetId);
+      navigate(`/chat/${conversationId}`);
+    } catch {
+      setMessageError("Couldn't start the conversation. Try again.");
+    } finally {
+      setMessaging(false);
+    }
   };
 
   if (!displayProfile) {
@@ -191,7 +201,12 @@ export function Profile() {
             >
               {following ? "Following" : followsMe ? "Follow Back" : "Follow"}
             </button>
-            <button onClick={handleMessage} className="flex-1 rounded-full chip py-2.5 text-sm font-semibold text-ink">
+            <button
+              onClick={handleMessage}
+              disabled={messaging}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full chip py-2.5 text-sm font-semibold text-ink disabled:opacity-60"
+            >
+              {messaging && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Message
             </button>
             <button
@@ -203,6 +218,8 @@ export function Profile() {
           </>
         )}
       </div>
+
+      {messageError && <p className="px-5 pt-2 text-center text-[12px] text-rose-400">{messageError}</p>}
 
       <div className="mt-6 flex justify-center gap-2 border-b border-white/5 px-5">
         {visibleTabs.map((t) => (
