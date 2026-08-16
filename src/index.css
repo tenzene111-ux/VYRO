@@ -245,6 +245,14 @@
   from { width: 0; }
   to { width: 100%; }
 }
+@keyframes splash-logo-in {
+  from { opacity: 0; transform: scale(0.6) rotate(-8deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 html, body {
   background: var(--color-void);
@@ -386,6 +394,8 @@ body {
 .animate-photo-zoom-out { animation: photo-zoom-out 6s ease-out forwards; }
 .animate-text-fade { animation: text-fade 0.5s ease-out both; }
 .animate-text-pop { animation: text-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-splash-logo { animation: splash-logo-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-splash-rise { animation: splash-rise 0.5s ease-out both; }
 .animate-text-slide { animation: text-slide 0.5s ease-out both; }
 .animate-text-bounce { animation: text-bounce 0.6s ease-out both; }
 .animate-text-typewriter { display: inline-block; overflow: hidden; white-space: nowrap; animation: text-typewriter 1s steps(20, end) both; }

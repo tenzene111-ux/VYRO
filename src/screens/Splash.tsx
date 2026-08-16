@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { LogoMark } from "../components/Logo";
 import { BhutanSkyline } from "../components/BhutanSkyline";
 import { useAuth } from "../context/AuthContext";
@@ -24,35 +23,23 @@ export function Splash() {
   return (
     <div className="theme-dark-forced fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center">
       <BhutanSkyline />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
-        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="relative"
-      >
+      <div className="relative animate-splash-logo">
         <span className="absolute inset-0 -m-6 rounded-full grad-primary opacity-40 blur-3xl animate-glow-pulse" />
         <LogoMark size={92} />
-      </motion.div>
+      </div>
 
-      <motion.h1
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.5 }}
-        className="mt-6 font-display text-3xl font-bold tracking-wide text-gradient"
+      <h1
+        className="mt-6 animate-splash-rise font-display text-3xl font-bold tracking-wide text-gradient"
+        style={{ animationDelay: "0.35s" }}
       >
         VYRO
-      </motion.h1>
+      </h1>
 
       {showTag && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mt-2 flex flex-col items-center gap-0.5"
-        >
+        <div className="mt-2 flex animate-splash-rise flex-col items-center gap-0.5">
           <p className="text-[13px] font-semibold text-ink">Create • Share • Earn</p>
           <p className="text-[11.5px] text-mist">The Next Gen Bhutanese Social &amp; Video App</p>
-        </motion.div>
+        </div>
       )}
     </div>
   );

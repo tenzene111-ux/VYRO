@@ -1,26 +1,38 @@
-import { FilesetResolver, ImageSegmenter, FaceLandmarker, type NormalizedLandmark } from "@mediapipe/tasks-vision";
+import type { ImageSegmenter, FaceLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
 // Real on-device ML (Google's MediaPipe), runs entirely in the browser — no account,
 // no server, no cost. Model weights are fetched from Google's public CDN the first
 // time a feature is used (and cached by the browser after that), so it needs the
 // end user's normal internet access, same as loading any other asset.
+//
+// @mediapipe/tasks-vision's own JS glue code is dynamically imported (not a
+// static top-level import) so it lands in its own chunk instead of ShortsCamera's
+// — getSegmenter/getFaceLandmarker are already only called once the user turns
+// on a background/AR effect, and a static import here would silently defeat
+// that by bundling the library into every camera-screen visit regardless.
 const WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const SEGMENTER_MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
 const FACE_MODEL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 
-let filesetPromise: ReturnType<typeof FilesetResolver.forVisionTasks> | null = null;
+let visionModulePromise: Promise<typeof import("@mediapipe/tasks-vision")> | null = null;
+function loadVisionModule() {
+  if (!visionModulePromise) visionModulePromise = import("@mediapipe/tasks-vision");
+  return visionModulePromise;
+}
+
+let filesetPromise: Promise<any> | null = null;
 function getFileset() {
-  if (!filesetPromise) filesetPromise = FilesetResolver.forVisionTasks(WASM_BASE);
+  if (!filesetPromise) filesetPromise = loadVisionModule().then((mod) => mod.FilesetResolver.forVisionTasks(WASM_BASE));
   return filesetPromise;
 }
 
 let segmenterPromise: Promise<ImageSegmenter> | null = null;
 export function getSegmenter(): Promise<ImageSegmenter> {
   if (!segmenterPromise) {
-    segmenterPromise = getFileset().then((fileset) =>
-      ImageSegmenter.createFromOptions(fileset, {
+    segmenterPromise = Promise.all([getFileset(), loadVisionModule()]).then(([fileset, mod]) =>
+      mod.ImageSegmenter.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: SEGMENTER_MODEL, delegate: "GPU" },
         runningMode: "VIDEO",
         outputConfidenceMasks: true,
@@ -34,8 +46,8 @@ export function getSegmenter(): Promise<ImageSegmenter> {
 let faceLandmarkerPromise: Promise<FaceLandmarker> | null = null;
 export function getFaceLandmarker(): Promise<FaceLandmarker> {
   if (!faceLandmarkerPromise) {
-    faceLandmarkerPromise = getFileset().then((fileset) =>
-      FaceLandmarker.createFromOptions(fileset, {
+    faceLandmarkerPromise = Promise.all([getFileset(), loadVisionModule()]).then(([fileset, mod]) =>
+      mod.FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: FACE_MODEL, delegate: "GPU" },
         runningMode: "VIDEO",
         numFaces: 1,

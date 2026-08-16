@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
-import jsQR from "jsqr";
 import { ArrowLeft, Share2, Copy, Check, Camera, ScanLine } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth } from "../../context/AuthContext";
@@ -48,41 +47,47 @@ export function QRCodeScreen() {
       setScanError("That code isn't a VYRO profile link — point at another one.");
     };
 
-    const tick = () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code) {
-            handleDecoded(code.data);
-            return;
+    // jsqr is only needed for this tab, so it's loaded on demand instead of
+    // adding its weight to every QR-screen visit (most are just "My Code")
+    import("jsqr").then(({ default: jsQR }) => {
+      if (cancelled) return;
+
+      const tick = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+              handleDecoded(code.data);
+              return;
+            }
           }
         }
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" } })
-      .then((s) => {
-        if (cancelled) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        stream = s;
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-          videoRef.current.play().catch(() => {});
-        }
         rafRef.current = requestAnimationFrame(tick);
-      })
-      .catch(() => setScanError("Camera access was denied. Allow camera permission in your browser to scan a code."));
+      };
+
+      navigator.mediaDevices
+        ?.getUserMedia({ video: { facingMode: "environment" } })
+        .then((s) => {
+          if (cancelled) {
+            s.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          stream = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+            videoRef.current.play().catch(() => {});
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        })
+        .catch(() => setScanError("Camera access was denied. Allow camera permission in your browser to scan a code."));
+    });
 
     return () => {
       cancelled = true;
