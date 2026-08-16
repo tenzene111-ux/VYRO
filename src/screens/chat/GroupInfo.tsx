@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, ShieldCheck, Crown, MoreVertical, Ban, UserMinus, ChevronUp, ChevronDown, Pencil, Check } from "lucide-react";
+import {
+  ArrowLeft, Loader2, ShieldCheck, Crown, MoreVertical, Ban, UserMinus, ChevronUp, ChevronDown, Pencil, Check, Bot, Plus, X,
+} from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { gradientFor } from "../../lib/gradients";
 import { useAuth, type Profile } from "../../context/AuthContext";
@@ -15,7 +17,13 @@ import {
   banGroupMember,
   unbanGroupMember,
   updateGroupInfo,
+  setGroupWelcomeMessage,
+  listAutoReplyRules,
+  createAutoReplyRule,
+  setAutoReplyRuleEnabled,
+  deleteAutoReplyRule,
   type Group,
+  type AutoReplyRule,
 } from "../../lib/api";
 
 type MemberRow = Profile & { role: string };
@@ -34,10 +42,20 @@ export function GroupInfo() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showAutomation, setShowAutomation] = useState(false);
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [savingWelcome, setSavingWelcome] = useState(false);
+  const [autoReplies, setAutoReplies] = useState<AutoReplyRule[] | null>(null);
+  const [newKeyword, setNewKeyword] = useState("");
+  const [newReply, setNewReply] = useState("");
+  const [addingRule, setAddingRule] = useState(false);
 
   const load = () => {
     if (!id || !user) return;
-    getGroup(id).then(setGroup);
+    getGroup(id).then((g) => {
+      setGroup(g);
+      if (g) setWelcomeMessage(g.welcome_message ?? "");
+    });
     getMyGroupRole(id, user.id).then(setMyRole);
     listGroupMembersDetailed(id).then((rows) =>
       setMembers(rows.sort((a, b) => roleWeight(a.role) - roleWeight(b.role) || a.name.localeCompare(b.name)))
@@ -47,6 +65,56 @@ export function GroupInfo() {
   useEffect(load, [id, user]);
 
   const canManage = myRole === "owner" || myRole === "admin";
+
+  const handleShowAutomation = () => {
+    setShowAutomation((v) => !v);
+    if (!autoReplies && id) listAutoReplyRules(id).then(setAutoReplies).catch(() => setAutoReplies([]));
+  };
+
+  const handleSaveWelcome = async () => {
+    if (!id || savingWelcome) return;
+    setSavingWelcome(true);
+    try {
+      await setGroupWelcomeMessage(id, welcomeMessage.trim());
+      setGroup((g) => (g ? { ...g, welcome_message: welcomeMessage.trim() || null } : g));
+    } finally {
+      setSavingWelcome(false);
+    }
+  };
+
+  const handleAddRule = async () => {
+    if (!id || !user || !newKeyword.trim() || !newReply.trim() || addingRule) return;
+    setAddingRule(true);
+    try {
+      const ruleId = await createAutoReplyRule(id, user.id, newKeyword.trim(), newReply.trim());
+      setAutoReplies((prev) => [
+        ...(prev ?? []),
+        { id: ruleId, group_id: id, keyword: newKeyword.trim(), reply_text: newReply.trim(), enabled: true, created_at: new Date().toISOString() },
+      ]);
+      setNewKeyword("");
+      setNewReply("");
+    } finally {
+      setAddingRule(false);
+    }
+  };
+
+  const handleToggleRule = async (rule: AutoReplyRule) => {
+    setAutoReplies((prev) => (prev ? prev.map((r) => (r.id === rule.id ? { ...r, enabled: !r.enabled } : r)) : prev));
+    try {
+      await setAutoReplyRuleEnabled(rule.id, !rule.enabled);
+    } catch {
+      if (id) listAutoReplyRules(id).then(setAutoReplies);
+    }
+  };
+
+  const handleDeleteRule = async (rule: AutoReplyRule) => {
+    setAutoReplies((prev) => (prev ? prev.filter((r) => r.id !== rule.id) : prev));
+    try {
+      await deleteAutoReplyRule(rule.id);
+    } catch {
+      if (id) listAutoReplyRules(id).then(setAutoReplies);
+    }
+  };
 
   const handleStartEdit = () => {
     if (!group) return;
@@ -261,6 +329,105 @@ export function GroupInfo() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {canManage && (
+        <div className="mb-8">
+          <button onClick={handleShowAutomation} className="flex w-full items-center justify-between px-1 py-1 text-left">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-mist">
+              <Bot className="h-3.5 w-3.5" /> Automation
+            </p>
+            {showAutomation ? <ChevronUp className="h-3.5 w-3.5 text-mist" /> : <ChevronDown className="h-3.5 w-3.5 text-mist" />}
+          </button>
+          {showAutomation && (
+            <div className="mt-2 flex flex-col gap-3">
+              <div className="rounded-2xl glass-card p-3.5">
+                <p className="mb-1.5 text-[12.5px] font-semibold text-ink">Welcome message</p>
+                <p className="mb-2 text-[11px] text-mist">
+                  Posted automatically when someone joins. Use <span className="font-mono text-ink/80">{"{name}"}</span> for their name.
+                </p>
+                <textarea
+                  value={welcomeMessage}
+                  onChange={(e) => setWelcomeMessage(e.target.value)}
+                  placeholder="e.g. Welcome to the group, {name}! 👋"
+                  rows={2}
+                  className="mb-2 w-full resize-none rounded-xl chip px-3 py-2 text-[12.5px] text-ink placeholder:text-mist focus:outline-none"
+                />
+                <button
+                  onClick={handleSaveWelcome}
+                  disabled={savingWelcome}
+                  className="flex items-center gap-1.5 rounded-full grad-primary px-3.5 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                >
+                  {savingWelcome && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save
+                </button>
+              </div>
+
+              <div className="rounded-2xl glass-card p-3.5">
+                <p className="mb-1.5 text-[12.5px] font-semibold text-ink">Keyword auto-replies</p>
+                <p className="mb-2 text-[11px] text-mist">
+                  When a message contains a keyword, the group posts the matching reply automatically.
+                </p>
+
+                {autoReplies === null ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-mist" />
+                  </div>
+                ) : (
+                  autoReplies.length > 0 && (
+                    <div className="mb-3 flex flex-col gap-1.5">
+                      {autoReplies.map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 rounded-xl chip px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12px] font-semibold text-ink">{r.keyword}</p>
+                            <p className="truncate text-[11px] text-mist">{r.reply_text}</p>
+                          </div>
+                          <button
+                            onClick={() => handleToggleRule(r)}
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
+                              r.enabled ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-mist"
+                            }`}
+                          >
+                            {r.enabled ? "On" : "Off"}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRule(r)}
+                            className="shrink-0 rounded-full p-1 text-mist hover:text-rose-400"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <input
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    placeholder="Keyword (e.g. rules)"
+                    className="w-full rounded-xl chip px-3 py-2 text-[12.5px] text-ink placeholder:text-mist focus:outline-none"
+                  />
+                  <input
+                    value={newReply}
+                    onChange={(e) => setNewReply(e.target.value)}
+                    placeholder="Auto-reply text"
+                    className="w-full rounded-xl chip px-3 py-2 text-[12.5px] text-ink placeholder:text-mist focus:outline-none"
+                  />
+                  <button
+                    onClick={handleAddRule}
+                    disabled={!newKeyword.trim() || !newReply.trim() || addingRule}
+                    className="flex items-center justify-center gap-1.5 rounded-full grad-primary px-3.5 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {addingRule ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    Add rule
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

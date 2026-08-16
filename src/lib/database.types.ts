@@ -512,6 +512,7 @@ export type Database = {
           story_preview_text: string | null;
           topic_id: string | null;
           sticker_emoji: string | null;
+          is_auto_reply: boolean;
           created_at: string;
         };
         Insert: {
@@ -545,6 +546,7 @@ export type Database = {
           story_preview_text?: string | null;
           topic_id?: string | null;
           sticker_emoji?: string | null;
+          is_auto_reply?: boolean;
           created_at?: string;
         };
         Update: {
@@ -578,6 +580,7 @@ export type Database = {
           story_preview_text?: string | null;
           topic_id?: string | null;
           sticker_emoji?: string | null;
+          is_auto_reply?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -837,6 +840,7 @@ export type Database = {
           creator_id: string;
           conversation_id: string | null;
           encrypted: boolean;
+          welcome_message: string | null;
           created_at: string;
         };
         Insert: {
@@ -847,6 +851,7 @@ export type Database = {
           creator_id: string;
           conversation_id?: string | null;
           encrypted?: boolean;
+          welcome_message?: string | null;
           created_at?: string;
         };
         Update: {
@@ -857,6 +862,37 @@ export type Database = {
           creator_id?: string;
           conversation_id?: string | null;
           encrypted?: boolean;
+          welcome_message?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      group_auto_replies: {
+        Row: {
+          id: string;
+          group_id: string;
+          keyword: string;
+          reply_text: string;
+          enabled: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          keyword: string;
+          reply_text: string;
+          enabled?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          group_id?: string;
+          keyword?: string;
+          reply_text?: string;
+          enabled?: boolean;
+          created_by?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -1684,6 +1720,10 @@ export type Database = {
       };
       subscribe_to_creator: {
         Args: { p_creator_id: string };
+        Returns: undefined;
+      };
+      set_group_welcome_message: {
+        Args: { p_group_id: string; p_message: string };
         Returns: undefined;
       };
       is_live_host: {

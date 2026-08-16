@@ -940,6 +940,7 @@ export type ChatMessage = {
   story_preview_text: string | null;
   topic_id: string | null;
   sticker_emoji: string | null;
+  is_auto_reply: boolean;
   created_at: string;
   reactions: MessageReaction[];
   poll: Poll | null;
@@ -1520,6 +1521,7 @@ export type Group = {
   creator_id: string;
   conversation_id: string | null;
   encrypted: boolean;
+  welcome_message: string | null;
   created_at: string;
   member_count: number;
 };
@@ -1647,6 +1649,47 @@ export async function updateGroupInfo(groupId: string, name: string, description
 
 export async function adminDeleteGroupMessage(messageId: string) {
   const { error } = await supabase.rpc("admin_delete_group_message", { p_message_id: messageId });
+  if (error) throw error;
+}
+
+// ---------- group automation (welcome message + keyword auto-replies) ----------
+// Both run as plain Postgres triggers (schema_v35.sql) — no external bot
+// hosting. Auto-reply messages come back through the normal realtime
+// message subscription like anything else, tagged is_auto_reply.
+
+export async function setGroupWelcomeMessage(groupId: string, message: string) {
+  const { error } = await supabase.rpc("set_group_welcome_message", { p_group_id: groupId, p_message: message });
+  if (error) throw error;
+}
+
+export type AutoReplyRule = { id: string; group_id: string; keyword: string; reply_text: string; enabled: boolean; created_at: string };
+
+export async function listAutoReplyRules(groupId: string): Promise<AutoReplyRule[]> {
+  const { data, error } = await supabase
+    .from("group_auto_replies")
+    .select("id, group_id, keyword, reply_text, enabled, created_at")
+    .eq("group_id", groupId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createAutoReplyRule(groupId: string, userId: string, keyword: string, replyText: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const { error } = await supabase
+    .from("group_auto_replies")
+    .insert({ id, group_id: groupId, keyword, reply_text: replyText, created_by: userId });
+  if (error) throw error;
+  return id;
+}
+
+export async function setAutoReplyRuleEnabled(ruleId: string, enabled: boolean) {
+  const { error } = await supabase.from("group_auto_replies").update({ enabled }).eq("id", ruleId);
+  if (error) throw error;
+}
+
+export async function deleteAutoReplyRule(ruleId: string) {
+  const { error } = await supabase.from("group_auto_replies").delete().eq("id", ruleId);
   if (error) throw error;
 }
 

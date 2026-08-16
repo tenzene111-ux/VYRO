@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, Plus, Sticker } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, Plus, Sticker, Bot } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -714,6 +714,11 @@ export function GroupChat() {
                   {m.forwarded && (
                     <p className={`mb-1 flex items-center gap-1 text-[10.5px] font-semibold ${mine ? "text-white/70" : "text-mist"}`}>
                       <Forward className="h-3 w-3" /> Forwarded
+                    </p>
+                  )}
+                  {m.is_auto_reply && (
+                    <p className={`mb-1 flex items-center gap-1 text-[10.5px] font-semibold ${mine ? "text-white/70" : "text-mist"}`}>
+                      <Bot className="h-3 w-3" /> Automated
                     </p>
                   )}
                   {repliedTo && (
