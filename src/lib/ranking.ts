@@ -65,6 +65,60 @@ export function filterFollowing(posts: FeedPost[], followingIds: Set<string>, cu
 }
 
 /**
+ * Trending is about growth rate, not totals — a post with 500 likes in 2
+ * hours is "hotter" than one with 10,000 likes over 30 days. We don't store
+ * time-bucketed engagement counters, so we approximate velocity as total
+ * engagement divided by age: that's literally an average rate of
+ * accumulation, and it naturally favors a post that racked up engagement
+ * fast over an old post that merely accumulated a lot over a long time.
+ * A small same-region boost adds real regional relevance when the viewer's
+ * own profile location overlaps with the author's.
+ */
+/**
+ * Creators (not already followed) whose recent posts (last 72h) show strong
+ * average engagement — i.e. accelerating, not just a single lucky viral hit.
+ */
+export function pickRisingCreators(
+  posts: FeedPost[],
+  followingIds: Set<string>,
+  currentUserId: string,
+  limit = 6
+): FeedPost["author"][] {
+  const now = Date.now();
+  const byAuthor = new Map<string, { author: FeedPost["author"]; score: number; count: number }>();
+  for (const p of posts) {
+    if (p.author.id === currentUserId || followingIds.has(p.author.id)) continue;
+    const ageHours = (now - new Date(p.created_at).getTime()) / 3_600_000;
+    if (ageHours > 72) continue;
+    const cur = byAuthor.get(p.author.id) ?? { author: p.author, score: 0, count: 0 };
+    cur.score += p.like_count * 3 + p.comment_count * 5;
+    cur.count += 1;
+    byAuthor.set(p.author.id, cur);
+  }
+  return [...byAuthor.values()]
+    .sort((a, b) => b.score / b.count - a.score / a.count)
+    .slice(0, limit)
+    .map((c) => c.author);
+}
+
+export function rankTrending(posts: FeedPost[], viewerLocation?: string | null): FeedPost[] {
+  const now = Date.now();
+  const viewerLoc = viewerLocation?.trim().toLowerCase();
+  return [...posts]
+    .map((post) => {
+      const ageHours = Math.max(0.5, (now - new Date(post.created_at).getTime()) / 3_600_000);
+      const engagement = post.like_count * 3 + post.comment_count * 5;
+      const velocity = engagement / (ageHours + 2);
+      const freshnessBoost = ageHours < 72 ? (72 - ageHours) / 72 : 0;
+      const regionalBoost = viewerLoc && post.author.location?.toLowerCase().includes(viewerLoc) ? 15 : 0;
+      const score = velocity * 10 + freshnessBoost * 20 + regionalBoost;
+      return { post, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.post);
+}
+
+/**
  * Greedily reorders an already-ranked list so the same creator never appears
  * twice in a row when a different-author alternative is available, without
  * otherwise disturbing the relative order (best next pick each step).

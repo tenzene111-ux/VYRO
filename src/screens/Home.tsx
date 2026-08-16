@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Search, Bell, Plus, Clapperboard, MessageSquare, Pencil } from "lucide-react";
+import { Search, Bell, Plus, Clapperboard, MessageSquare, Pencil, ArrowUp, Hash } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { Avatar } from "../components/Avatar";
 import { PostCard } from "../components/PostCard";
@@ -13,11 +13,13 @@ import {
   listMyWatchSignals,
   listPostTexts,
   listProfiles,
+  listTrendingHashtags,
   toggleFollow,
   type FeedPost,
   type StoryWithAuthor,
+  type TrendingHashtag,
 } from "../lib/api";
-import { buildInterestProfile, diversify, rankForYou, filterFollowing } from "../lib/ranking";
+import { buildInterestProfile, diversify, pickRisingCreators, rankForYou, rankTrending, filterFollowing } from "../lib/ranking";
 
 type Tab = "forYou" | "following" | "trending";
 const TABS: { id: Tab; label: string }[] = [
@@ -26,15 +28,20 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "trending", label: "Trending" },
 ];
 
+type FollowingMode = "latest" | "recommended";
+
 export function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>("forYou");
+  const [followingMode, setFollowingMode] = useState<FollowingMode>("latest");
+  const [newFollowingCount, setNewFollowingCount] = useState(0);
   const [storyAuthors, setStoryAuthors] = useState<{ author: Profile; seen: boolean }[]>([]);
   const [suggested, setSuggested] = useState<Profile[]>([]);
   const [interestProfile, setInterestProfile] = useState<Record<string, number>>({});
+  const [trendingHashtags, setTrendingHashtags] = useState<TrendingHashtag[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -46,6 +53,7 @@ export function Home() {
         setInterestProfile(buildInterestProfile(signals, textById));
       })
       .catch(() => setInterestProfile({}));
+    listTrendingHashtags().then(setTrendingHashtags).catch(() => setTrendingHashtags([]));
     Promise.all([listActiveStories(), listSeenStoryIds(user.id)]).then(([stories, seenIds]) => {
       const byAuthor = new Map<string, { author: StoryWithAuthor["author"]; seen: boolean }>();
       for (const s of stories) {
@@ -61,6 +69,15 @@ export function Home() {
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!allPosts || !user) return;
+    const lastSeen = Number(localStorage.getItem(`vyro-following-seen-${user.id}`) ?? 0);
+    const count = allPosts.filter(
+      (p) => p.author.id !== user.id && followingIds.has(p.author.id) && new Date(p.created_at).getTime() > lastSeen
+    ).length;
+    setNewFollowingCount(count);
+  }, [allPosts, followingIds, user]);
+
   const handleFollowSuggested = async (targetId: string) => {
     if (!user) return;
     setSuggested((prev) => prev.filter((p) => p.id !== targetId));
@@ -71,14 +88,41 @@ export function Home() {
     }
   };
 
+  const handleFollowRising = async (targetId: string) => {
+    if (!user) return;
+    setFollowingIds((prev) => new Set(prev).add(targetId));
+    try {
+      await toggleFollow(user.id, targetId, false);
+    } catch {
+      setFollowingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetId);
+        return next;
+      });
+    }
+  };
+
+  const handleJumpToNewest = () => {
+    if (!user) return;
+    localStorage.setItem(`vyro-following-seen-${user.id}`, String(Date.now()));
+    setNewFollowingCount(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const followingPosts = allPosts ? filterFollowing(allPosts, followingIds, user?.id ?? "") : [];
+
   const tabFiltered =
     allPosts === null
       ? null
       : tab === "forYou"
       ? diversify(rankForYou(allPosts, followingIds, user?.id ?? "", interestProfile))
       : tab === "following"
-      ? filterFollowing(allPosts, followingIds, user?.id ?? "")
-      : [...allPosts].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count));
+      ? followingMode === "latest"
+        ? followingPosts
+        : diversify(rankForYou(followingPosts, followingIds, user?.id ?? "", interestProfile))
+      : rankTrending(allPosts, myProfile?.location);
+
+  const risingCreators = tab === "trending" && allPosts ? pickRisingCreators(allPosts, followingIds, user?.id ?? "") : [];
 
   const videoPosts = tabFiltered?.filter((p) => p.video_url) ?? null;
   const posts = tabFiltered?.filter((p) => !p.video_url) ?? null;
@@ -156,6 +200,78 @@ export function Home() {
           </button>
         ))}
       </div>
+
+      {tab === "following" && (
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex gap-1.5 rounded-full chip p-1">
+            {(["latest", "recommended"] as FollowingMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setFollowingMode(m)}
+                className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold capitalize transition-colors ${
+                  followingMode === m ? "grad-purple-blue text-white" : "text-mist"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {newFollowingCount > 0 && (
+            <button
+              onClick={handleJumpToNewest}
+              className="flex items-center gap-1.5 rounded-full chip px-3 py-1.5 text-[12px] font-semibold text-cyan-300"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+              {newFollowingCount} new
+              <ArrowUp className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab === "trending" && (trendingHashtags.length > 0 || risingCreators.length > 0) && (
+        <div className="mb-5 flex flex-col gap-4">
+          {trendingHashtags.length > 0 && (
+            <div>
+              <p className="mb-2 text-[12.5px] font-semibold text-mist">🔥 Trending hashtags</p>
+              <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+                {trendingHashtags.map((h) => (
+                  <button
+                    key={h.tag}
+                    onClick={() => navigate(`/explore?q=${encodeURIComponent(h.tag)}`)}
+                    className="flex shrink-0 items-center gap-1 rounded-full chip px-3.5 py-1.5 text-[12.5px] font-semibold text-ink"
+                  >
+                    <Hash className="h-3 w-3 text-cyan-300" />
+                    {h.tag.replace(/^#/, "")}
+                    <span className="text-mist">· {h.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {risingCreators.length > 0 && (
+            <div>
+              <p className="mb-2 text-[12.5px] font-semibold text-mist">🚀 Rising creators</p>
+              <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
+                {risingCreators.map((c) => (
+                  <div key={c.id} className="flex w-24 shrink-0 flex-col items-center gap-1.5 rounded-2xl glass-card p-3 text-center">
+                    <button onClick={() => navigate(`/profile/${c.id}`)} className="flex flex-col items-center gap-1.5">
+                      <Avatar name={c.name} avatarUrl={c.avatar_url} size={48} />
+                      <span className="w-full truncate text-[11.5px] font-semibold text-ink">{c.name.split(" ")[0]}</span>
+                    </button>
+                    <button
+                      onClick={() => handleFollowRising(c.id)}
+                      className="mt-0.5 w-full rounded-full grad-purple-blue py-1 text-[11px] font-semibold text-white"
+                    >
+                      Follow
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1.5 rounded-full chip p-1">
         <button className="flex flex-1 items-center justify-center gap-1.5 rounded-full grad-primary py-2 text-[12.5px] font-semibold text-white">
