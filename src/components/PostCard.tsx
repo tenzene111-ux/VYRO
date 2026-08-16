@@ -67,7 +67,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   };
 
   return (
-    <article className="border-b border-white/10 pb-3 animate-rise">
+    <article className="border-b-8 border-void-2 pb-3 animate-rise">
       <div className="flex items-center gap-3 px-4 pt-4">
         <button onClick={() => navigate(`/profile/${post.author.id}`)}>
           <Avatar name={post.author.name} avatarUrl={post.author.avatar_url} size={40} />
