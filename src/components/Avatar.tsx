@@ -18,7 +18,7 @@ export function Avatar({
   avatarUrl?: string | null;
   size?: number;
   online?: boolean;
-  ring?: "story" | "story-seen" | "live" | boolean;
+  ring?: "story" | "story-seen" | "story-cf" | "live" | boolean;
   className?: string;
 }) {
   const [from, to] = paletteFor(name);
@@ -28,6 +28,8 @@ export function Avatar({
   const ringBg =
     ring === "story-seen"
       ? "rgba(255,255,255,0.16)"
+      : ring === "story-cf"
+      ? "linear-gradient(135deg, #10b981, #34d399)"
       : ring === "live"
       ? "linear-gradient(135deg, #ef4444, #d946ef)"
       : ring

@@ -2006,6 +2006,7 @@ export type StoryWithAuthor = {
   caption: string | null;
   image_url: string | null;
   video_url: string | null;
+  audience: string;
   created_at: string;
   author: Profile;
 };
@@ -2013,7 +2014,7 @@ export type StoryWithAuthor = {
 export async function listActiveStories(): Promise<StoryWithAuthor[]> {
   const { data: stories, error } = await supabase
     .from("stories")
-    .select("id, caption, image_url, video_url, created_at, author_id")
+    .select("id, caption, image_url, video_url, audience, created_at, author_id")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -2027,15 +2028,29 @@ export async function listActiveStories(): Promise<StoryWithAuthor[]> {
     .map((s) => {
       const author = authorById.get(s.author_id);
       if (!author) return null;
-      return { id: s.id, caption: s.caption, image_url: s.image_url, video_url: s.video_url, created_at: s.created_at, author };
+      return {
+        id: s.id,
+        caption: s.caption,
+        image_url: s.image_url,
+        video_url: s.video_url,
+        audience: s.audience,
+        created_at: s.created_at,
+        author,
+      };
     })
     .filter((s): s is StoryWithAuthor => s !== null);
 }
 
-export async function createStory(authorId: string, caption: string, imageUrl?: string, videoUrl?: string) {
+export async function createStory(
+  authorId: string,
+  caption: string,
+  imageUrl?: string,
+  videoUrl?: string,
+  audience: "everyone" | "close_friends" = "everyone"
+) {
   const { error } = await supabase
     .from("stories")
-    .insert({ author_id: authorId, caption: caption || null, image_url: imageUrl ?? null, video_url: videoUrl ?? null });
+    .insert({ author_id: authorId, caption: caption || null, image_url: imageUrl ?? null, video_url: videoUrl ?? null, audience });
   if (error) throw error;
 }
 
@@ -2047,6 +2062,25 @@ export async function recordStoryView(storyId: string, viewerId: string) {
 export async function listSeenStoryIds(viewerId: string): Promise<Set<string>> {
   const { data } = await supabase.from("story_views").select("story_id").eq("viewer_id", viewerId);
   return new Set((data ?? []).map((v) => v.story_id));
+}
+
+export async function listCloseFriends(userId: string): Promise<Profile[]> {
+  const { data: rows, error } = await supabase.from("close_friends").select("friend_id").eq("user_id", userId);
+  if (error) throw error;
+  const ids = (rows ?? []).map((r) => r.friend_id);
+  if (ids.length === 0) return [];
+  const { data } = await supabase.from("profiles").select("*").in("id", ids);
+  return data ?? [];
+}
+
+export async function addCloseFriend(userId: string, friendId: string) {
+  const { error } = await supabase.from("close_friends").insert({ user_id: userId, friend_id: friendId });
+  if (error) throw error;
+}
+
+export async function removeCloseFriend(userId: string, friendId: string) {
+  const { error } = await supabase.from("close_friends").delete().eq("user_id", userId).eq("friend_id", friendId);
+  if (error) throw error;
 }
 
 export type StoryViewer = { profile: Profile; viewed_at: string };

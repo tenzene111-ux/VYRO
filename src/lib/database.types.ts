@@ -982,6 +982,7 @@ export type Database = {
           caption: string | null;
           image_url: string | null;
           video_url: string | null;
+          audience: string;
           created_at: string;
           expires_at: string;
         };
@@ -991,6 +992,7 @@ export type Database = {
           caption?: string | null;
           image_url?: string | null;
           video_url?: string | null;
+          audience?: string;
           created_at?: string;
           expires_at?: string;
         };
@@ -1000,8 +1002,27 @@ export type Database = {
           caption?: string | null;
           image_url?: string | null;
           video_url?: string | null;
+          audience?: string;
           created_at?: string;
           expires_at?: string;
+        };
+        Relationships: [];
+      };
+      close_friends: {
+        Row: {
+          user_id: string;
+          friend_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          friend_id: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          friend_id?: string;
+          created_at?: string;
         };
         Relationships: [];
       };

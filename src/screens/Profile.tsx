@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Pencil, Grid3x3, Clapperboard, Bookmark, Heart, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2, QrCode,
+  Pencil, Grid3x3, Clapperboard, Bookmark, Heart, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2, QrCode, Users,
 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { GiftPicker } from "../components/GiftPicker";
@@ -141,9 +141,14 @@ export function Profile() {
         <h1 className="font-display text-xl font-bold text-ink">Profile</h1>
         <div className="flex items-center gap-1">
           {isMe && (
-            <button onClick={() => navigate("/chat/qr")} className="rounded-full p-2 chip text-mist" title="QR code">
-              <QrCode className="h-4.5 w-4.5" />
-            </button>
+            <>
+              <button onClick={() => navigate("/close-friends")} className="rounded-full p-2 chip text-mist" title="Close Friends">
+                <Users className="h-4.5 w-4.5" />
+              </button>
+              <button onClick={() => navigate("/chat/qr")} className="rounded-full p-2 chip text-mist" title="QR code">
+                <QrCode className="h-4.5 w-4.5" />
+              </button>
+            </>
           )}
           <button onClick={() => navigate("/chat")} className="rounded-full p-2 chip text-mist">
             <MessageCircle className="h-4.5 w-4.5" />

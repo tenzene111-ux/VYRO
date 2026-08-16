@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Loader2, ImagePlus, Video as VideoIcon } from "lucide-react";
+import { X, Loader2, ImagePlus, Video as VideoIcon, Users, Globe2 } from "lucide-react";
 import { gradientFor } from "../lib/gradients";
 import { useAuth } from "../context/AuthContext";
 import { createStory } from "../lib/api";
@@ -13,6 +13,7 @@ export function CreateStory() {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
+  const [audience, setAudience] = useState<"everyone" | "close_friends">("everyone");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +46,7 @@ export function CreateStory() {
         const ext = mediaFile.name.split(".").pop() ?? "mp4";
         videoUrl = await uploadVideoBlob(user.id, mediaFile, ext);
       }
-      await createStory(user.id, caption.trim(), imageUrl, videoUrl);
+      await createStory(user.id, caption.trim(), imageUrl, videoUrl, audience);
       navigate("/home", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't post your story. Try again.");
@@ -120,9 +121,29 @@ export function CreateStory() {
 
       {error && <p className="relative z-10 px-6 pb-4 text-center text-[12.5px] text-rose-300">{error}</p>}
 
-      <p className="relative z-10 pb-8 text-center text-[11px] text-white/50 safe-bottom">
-        Visible to everyone on VYRO for 24 hours
-      </p>
+      <div className="relative z-10 flex items-center justify-center gap-2 pb-8 safe-bottom">
+        <button
+          onClick={() => setAudience("everyone")}
+          className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold backdrop-blur ${
+            audience === "everyone" ? "grad-purple-blue text-white" : "bg-black/35 text-white/70"
+          }`}
+        >
+          <Globe2 className="h-3.5 w-3.5" /> Everyone
+        </button>
+        <button
+          onClick={() => setAudience("close_friends")}
+          className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold backdrop-blur ${
+            audience === "close_friends" ? "bg-emerald-500 text-white" : "bg-black/35 text-white/70"
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" /> Close Friends
+        </button>
+        {audience === "close_friends" && (
+          <button onClick={() => navigate("/close-friends")} className="text-[11px] font-medium text-emerald-300 underline">
+            Manage list
+          </button>
+        )}
+      </div>
     </div>
   );
 }

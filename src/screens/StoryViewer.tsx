@@ -134,7 +134,14 @@ export function StoryViewer() {
         <div className="flex items-center gap-2.5">
           <Avatar name={author.name} avatarUrl={author.avatar_url} size={36} />
           <div>
-            <p className="text-[13px] font-semibold text-white">{author.name}</p>
+            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-white">
+              {author.name}
+              {current.audience === "close_friends" && (
+                <span className="rounded-full bg-emerald-500/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                  Close Friends
+                </span>
+              )}
+            </p>
             <p className="text-[11px] text-white/70">{timeAgo(current.created_at)}</p>
           </div>
         </div>
