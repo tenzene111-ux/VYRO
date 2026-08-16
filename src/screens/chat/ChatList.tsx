@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SquarePen, Loader2, Bookmark, Archive, Folder, Star, Users, Bell, Briefcase, Settings2, MessageSquareText, UserPlus } from "lucide-react";
+import { Search, SquarePen, Loader2, Bookmark, Archive, Folder, Star, Users, Bell, Briefcase, Settings2, MessageSquareText, UserPlus, QrCode } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import {
@@ -122,6 +122,9 @@ export function ChatList() {
             className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
           />
         </div>
+        <button onClick={() => navigate("/chat/qr")} className="rounded-full p-2.5 chip text-mist" title="QR code">
+          <QrCode className="h-4.5 w-4.5" />
+        </button>
         <button onClick={() => navigate("/chat/people")} className="rounded-full p-2.5 chip text-mist">
           <SquarePen className="h-4.5 w-4.5" />
         </button>
