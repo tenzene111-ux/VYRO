@@ -25,3 +25,8 @@ async function uploadToMedia(userId: string, file: Blob, ext: string): Promise<s
   const { data } = supabase.storage.from("media").getPublicUrl(path);
   return data.publicUrl;
 }
+
+export async function uploadChatFile(userId: string, file: File): Promise<string> {
+  const ext = file.name.split(".").pop() ?? "bin";
+  return uploadToMedia(userId, file, ext);
+}

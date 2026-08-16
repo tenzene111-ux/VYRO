@@ -628,23 +628,13 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, text, audio_url, ciphertext, created_at")
+    .select("conversation_id, text, audio_url, ciphertext, image_url, video_url, file_name, deleted_at, created_at")
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
-  const lastByConversation = new Map<
-    string,
-    { text: string | null; audio_url: string | null; ciphertext: string | null; created_at: string }
-  >();
+  const lastByConversation = new Map<string, NonNullable<typeof lastMessages>[number]>();
   for (const m of lastMessages ?? []) {
-    if (!lastByConversation.has(m.conversation_id)) {
-      lastByConversation.set(m.conversation_id, {
-        text: m.text,
-        audio_url: m.audio_url,
-        ciphertext: m.ciphertext,
-        created_at: m.created_at,
-      });
-    }
+    if (!lastByConversation.has(m.conversation_id)) lastByConversation.set(m.conversation_id, m);
   }
 
   return conversationIds
@@ -656,9 +646,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
       return {
         id,
         other,
-        last_message: last
-          ? last.text || (last.audio_url ? "🎤 Voice message" : last.ciphertext ? "🔒 Encrypted message" : "")
-          : null,
+        last_message: last ? messagePreviewText(last) : null,
         last_message_at: last?.created_at ?? null,
       };
     })
@@ -725,9 +713,27 @@ export type ChatMessage = {
   deleted_at: string | null;
   pinned: boolean;
   forwarded: boolean;
+  image_url: string | null;
+  video_url: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
   created_at: string;
   reactions: MessageReaction[];
 };
+
+export function messagePreviewText(
+  m: Pick<ChatMessage, "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at">
+): string {
+  if (m.deleted_at) return "This message was deleted";
+  if (m.text) return m.text;
+  if (m.image_url) return "📷 Photo";
+  if (m.video_url) return "🎬 Video";
+  if (m.file_name) return `📄 ${m.file_name}`;
+  if (m.audio_url) return "🎤 Voice message";
+  if (m.ciphertext) return "🔒 Encrypted message";
+  return "";
+}
 
 export async function listMessages(conversationId: string): Promise<ChatMessage[]> {
   const { data, error } = await supabase
@@ -836,11 +842,52 @@ export async function deleteMessageForEveryone(messageId: string) {
       audio_duration_seconds: null,
       ciphertext: null,
       iv: null,
+      image_url: null,
+      video_url: null,
+      file_url: null,
+      file_name: null,
+      file_size: null,
       pinned: false,
       deleted_at: new Date().toISOString(),
     })
     .eq("id", messageId);
   if (error) throw error;
+}
+
+export async function sendImageMessage(conversationId: string, senderId: string, imageUrl: string, replyToId?: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, image_url: imageUrl, reply_to_id: replyToId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "📷 Photo").catch(() => {});
+}
+
+export async function sendVideoMessageFile(conversationId: string, senderId: string, videoUrl: string, replyToId?: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, video_url: videoUrl, reply_to_id: replyToId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "🎬 Video").catch(() => {});
+}
+
+export async function sendFileMessage(
+  conversationId: string,
+  senderId: string,
+  fileUrl: string,
+  fileName: string,
+  fileSize: number,
+  replyToId?: string
+) {
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    file_url: fileUrl,
+    file_name: fileName,
+    file_size: fileSize,
+    reply_to_id: replyToId ?? null,
+  });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, `📄 ${fileName}`).catch(() => {});
 }
 
 export async function pinMessage(conversationId: string, messageId: string) {

@@ -30,7 +30,12 @@ export function MessageActionSheet({
   onUnpin: () => void;
   onForward: () => void;
 }) {
-  const canEdit = mine && !message.deleted_at && !message.audio_url;
+  // Copy/Forward only make sense for messages we can resolve as text (plain
+  // or decryptable) — voice, image, video and file messages aren't
+  // forwardable/copyable yet, so don't offer an action that would silently
+  // do nothing.
+  const hasResolvableText = !!(message.text || message.ciphertext);
+  const canEdit = mine && !message.deleted_at && hasResolvableText;
   const act = (fn: () => void) => {
     fn();
     onClose();
@@ -51,9 +56,9 @@ export function MessageActionSheet({
           ))}
         </div>
         {!message.deleted_at && <SheetRow icon={ReplyIcon} label="Reply" onClick={() => act(onReply)} />}
-        {!message.deleted_at && !message.audio_url && <SheetRow icon={Copy} label="Copy" onClick={() => act(onCopy)} />}
+        {!message.deleted_at && hasResolvableText && <SheetRow icon={Copy} label="Copy" onClick={() => act(onCopy)} />}
         {canEdit && <SheetRow icon={Pencil} label="Edit" onClick={() => act(onEdit)} />}
-        {!message.deleted_at && <SheetRow icon={Forward} label="Forward" onClick={() => act(onForward)} />}
+        {!message.deleted_at && hasResolvableText && <SheetRow icon={Forward} label="Forward" onClick={() => act(onForward)} />}
         {!message.deleted_at &&
           (message.pinned ? (
             <SheetRow icon={Pin} label="Unpin" onClick={() => act(onUnpin)} />

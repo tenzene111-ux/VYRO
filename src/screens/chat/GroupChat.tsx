@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
 import { MessageActionSheet } from "../../components/MessageActionSheet";
+import { ChatMediaBubble } from "../../components/ChatMediaBubble";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
 import {
@@ -14,6 +15,9 @@ import {
   listConversations,
   sendMessage,
   sendVoiceMessage,
+  sendImageMessage,
+  sendVideoMessageFile,
+  sendFileMessage,
   sendEncryptedGroupMessage,
   forwardMessage,
   editMessage,
@@ -34,6 +38,7 @@ import {
   subscribeToReactions,
   subscribeToReadReceipts,
   createTypingChannel,
+  messagePreviewText,
   type ChatConversation,
   type ChatMessage,
   type Group,
@@ -41,6 +46,7 @@ import {
 import { ensureKeyPair, wrapGroupKey, unwrapGroupKey, generateGroupKey, encryptText, decryptText } from "../../lib/crypto";
 import { supabase } from "../../lib/supabase";
 import { loadHiddenMessages, hideMessageLocally } from "../../lib/chatLocal";
+import { uploadChatFile } from "../../lib/storage";
 
 const TYPING_IDLE_MS = 3000;
 
@@ -75,7 +81,9 @@ export function GroupChat() {
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
   const [readPointers, setReadPointers] = useState<{ user_id: string; last_read_at: string }[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingChannelRef = useRef<ReturnType<typeof createTypingChannel> | null>(null);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingSentRef = useRef(0);
@@ -271,6 +279,25 @@ export function GroupChat() {
     setReplyingTo(null);
   };
 
+  const handleAttach = async (file: File) => {
+    if (!group?.conversation_id || !user || uploading) return;
+    const convId = group.conversation_id;
+    setUploading(true);
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    try {
+      const url = await uploadChatFile(user.id, file);
+      if (file.type.startsWith("image/")) await sendImageMessage(convId, user.id, url, replyToId);
+      else if (file.type.startsWith("video/")) await sendVideoMessageFile(convId, user.id, url, replyToId);
+      else await sendFileMessage(convId, user.id, url, file.name, file.size, replyToId);
+    } catch {
+      // upload failed — nothing was sent, no partial message left behind
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleLeave = async () => {
     if (!id) return;
     await leaveGroup(id);
@@ -453,9 +480,7 @@ export function GroupChat() {
           className="flex items-center gap-2 border-b border-white/5 bg-white/[0.03] px-3.5 py-2 text-left"
         >
           <Pin className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
-          <span className="min-w-0 flex-1 truncate text-[12px] text-ink/80">
-            {pinnedMessage.text ?? (pinnedMessage.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink/80">{messagePreviewText(pinnedMessage)}</span>
         </button>
       )}
 
@@ -492,11 +517,13 @@ export function GroupChat() {
                         mine ? "border-white/50 bg-white/10 text-white/80" : "border-cyan-400 bg-white/5 text-mist"
                       }`}
                     >
-                      {repliedTo.text ?? (repliedTo.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
+                      {messagePreviewText(repliedTo)}
                     </button>
                   )}
                   {m.deleted_at ? (
                     <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
+                  ) : m.image_url || m.video_url || m.file_url ? (
+                    <ChatMediaBubble message={m} mine={mine} />
                   ) : m.audio_url ? (
                     <VoiceMessageBubble url={m.audio_url} duration={m.audio_duration_seconds ?? 0} mine={mine} />
                   ) : (
@@ -555,9 +582,7 @@ export function GroupChat() {
             <p className="text-[11px] font-semibold text-cyan-300">
               {editingMessage ? "Editing message" : `Replying to ${authors.get(replyingTo?.sender_id ?? "")?.name ?? "message"}`}
             </p>
-            <p className="truncate text-[12px] text-mist">
-              {(editingMessage ?? replyingTo)?.text ?? ((editingMessage ?? replyingTo)?.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
-            </p>
+            <p className="truncate text-[12px] text-mist">{messagePreviewText((editingMessage ?? replyingTo)!)}</p>
           </div>
           <button
             onClick={() => {
@@ -576,15 +601,33 @@ export function GroupChat() {
 
       <div className="flex items-center gap-2 border-t border-white/5 px-3 py-3 safe-bottom">
         {!voiceRecording && (
-          <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
+          <>
             <input
-              value={input}
-              onChange={(e) => handleInputChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Message the group..."
-              className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAttach(file);
+              }}
             />
-          </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Paperclip className="h-4.5 w-4.5" />}
+            </button>
+            <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
+              <input
+                value={input}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
+                placeholder="Message the group..."
+                className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
+              />
+            </div>
+          </>
         )}
         {input.trim() ? (
           <button

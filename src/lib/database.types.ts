@@ -461,6 +461,11 @@ export type Database = {
           deleted_at: string | null;
           pinned: boolean;
           forwarded: boolean;
+          image_url: string | null;
+          video_url: string | null;
+          file_url: string | null;
+          file_name: string | null;
+          file_size: number | null;
           created_at: string;
         };
         Insert: {
@@ -479,6 +484,11 @@ export type Database = {
           deleted_at?: string | null;
           pinned?: boolean;
           forwarded?: boolean;
+          image_url?: string | null;
+          video_url?: string | null;
+          file_url?: string | null;
+          file_name?: string | null;
+          file_size?: number | null;
           created_at?: string;
         };
         Update: {
@@ -497,6 +507,11 @@ export type Database = {
           deleted_at?: string | null;
           pinned?: boolean;
           forwarded?: boolean;
+          image_url?: string | null;
+          video_url?: string | null;
+          file_url?: string | null;
+          file_name?: string | null;
+          file_size?: number | null;
           created_at?: string;
         };
         Relationships: [];
