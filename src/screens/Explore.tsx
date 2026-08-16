@@ -1,22 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, X, QrCode, MessageCircle, Flame, Music, Plane, Gamepad2, Trophy, Palette, Heart, Loader2 } from "lucide-react";
+import { Search, X, QrCode, MessageCircle, Heart, Loader2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { gradientFor } from "../lib/gradients";
+import { categories } from "../lib/categories";
 import { useAuth, type Profile } from "../context/AuthContext";
 import {
   listFollowing, listProfiles, listTopPosts, listTrendingHashtags, searchPeopleAndPosts, toggleFollow,
   type FeedPost, type TrendingHashtag,
 } from "../lib/api";
-
-const categories = [
-  { id: "trending", label: "Trending", icon: Flame, grad: "from-orange-500 to-pink-500" },
-  { id: "music", label: "Music", icon: Music, grad: "from-cyan-500 to-blue-500" },
-  { id: "travel", label: "Travel", icon: Plane, grad: "from-violet-500 to-fuchsia-500" },
-  { id: "gaming", label: "Gaming", icon: Gamepad2, grad: "from-blue-500 to-indigo-500" },
-  { id: "sports", label: "Sports", icon: Trophy, grad: "from-amber-500 to-orange-500" },
-  { id: "art", label: "Art & Design", icon: Palette, grad: "from-fuchsia-500 to-purple-600" },
-];
 
 export function Explore() {
   const navigate = useNavigate();
@@ -174,6 +166,7 @@ export function Explore() {
             {categories.map((c) => (
               <button
                 key={c.id}
+                onClick={() => navigate(`/explore/category/${c.id}`)}
                 className="flex flex-col items-center gap-2 rounded-2xl glass-card p-3.5 active:scale-95 transition-transform"
               >
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${c.grad}`}>

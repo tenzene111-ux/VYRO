@@ -40,6 +40,7 @@ const CreateCommunity = lazy(() => import("./screens/CreateCommunity").then((m) 
 const Rewards = lazy(() => import("./screens/Rewards").then((m) => ({ default: m.Rewards })));
 const Admin = lazy(() => import("./screens/Admin").then((m) => ({ default: m.Admin })));
 const Create = lazy(() => import("./screens/Create").then((m) => ({ default: m.Create })));
+const CategoryDiscovery = lazy(() => import("./screens/CategoryDiscovery").then((m) => ({ default: m.CategoryDiscovery })));
 const ShortsStudio = lazy(() => import("./screens/shorts/ShortsStudio").then((m) => ({ default: m.ShortsStudio })));
 const ShortsCamera = lazy(() => import("./screens/shorts/ShortsCamera").then((m) => ({ default: m.ShortsCamera })));
 const ShortsUpload = lazy(() => import("./screens/shorts/ShortsUpload").then((m) => ({ default: m.ShortsUpload })));
@@ -85,6 +86,7 @@ export default function App() {
                   <Route element={<Shell />}>
                     <Route path="/home" element={<Home />} />
                     <Route path="/explore" element={<Explore />} />
+                    <Route path="/explore/category/:id" element={<CategoryDiscovery />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/profile/:id" element={<Profile />} />
