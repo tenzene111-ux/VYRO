@@ -25,6 +25,7 @@ const CreatePost = lazy(() => import("./screens/CreatePost").then((m) => ({ defa
 const CreateGroup = lazy(() => import("./screens/CreateGroup").then((m) => ({ default: m.CreateGroup })));
 const CreateChannel = lazy(() => import("./screens/CreateChannel").then((m) => ({ default: m.CreateChannel })));
 const CloseFriends = lazy(() => import("./screens/CloseFriends").then((m) => ({ default: m.CloseFriends })));
+const HighlightViewer = lazy(() => import("./screens/HighlightViewer").then((m) => ({ default: m.HighlightViewer })));
 const CreateEvent = lazy(() => import("./screens/CreateEvent").then((m) => ({ default: m.CreateEvent })));
 const CreateListing = lazy(() => import("./screens/CreateListing").then((m) => ({ default: m.CreateListing })));
 const CreateStory = lazy(() => import("./screens/CreateStory").then((m) => ({ default: m.CreateStory })));
@@ -141,6 +142,7 @@ export default function App() {
                   <Route path="/settings/help" element={<HelpCenter />} />
                   <Route path="/stories/:userId" element={<StoryViewer />} />
                   <Route path="/close-friends" element={<CloseFriends />} />
+                  <Route path="/highlights/:highlightId" element={<HighlightViewer />} />
                   <Route path="/call/voice/:id" element={<VoiceCall />} />
                   <Route path="/call/video/:id" element={<VideoCall />} />
                   <Route path="/create/post" element={<CreatePost />} />

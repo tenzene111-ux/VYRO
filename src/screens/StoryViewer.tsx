@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { X, Send, Loader2, Eye } from "lucide-react";
+import { X, Send, Loader2, Eye, BookmarkPlus } from "lucide-react";
 import { Avatar } from "../components/Avatar";
+import { AddToHighlightSheet } from "../components/AddToHighlightSheet";
 import { gradientFor } from "../lib/gradients";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -28,6 +29,7 @@ export function StoryViewer() {
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [viewersOpen, setViewersOpen] = useState(false);
+  const [highlightSheetOpen, setHighlightSheetOpen] = useState(false);
   const [viewers, setViewers] = useState<StoryViewerRow[] | null>(null);
 
   useEffect(() => {
@@ -169,12 +171,22 @@ export function StoryViewer() {
       )}
 
       {isMine && (
-        <button
-          onClick={handleOpenViewers}
-          className="relative z-10 mx-auto mb-3 flex items-center gap-1.5 rounded-full bg-black/35 px-3.5 py-1.5 text-[12px] font-medium text-white backdrop-blur"
-        >
-          <Eye className="h-3.5 w-3.5" /> Viewers
-        </button>
+        <div className="relative z-10 mx-auto mb-3 flex items-center gap-2">
+          <button
+            onClick={handleOpenViewers}
+            className="flex items-center gap-1.5 rounded-full bg-black/35 px-3.5 py-1.5 text-[12px] font-medium text-white backdrop-blur"
+          >
+            <Eye className="h-3.5 w-3.5" /> Viewers
+          </button>
+          {(current.image_url || current.video_url) && (
+            <button
+              onClick={() => setHighlightSheetOpen(true)}
+              className="flex items-center gap-1.5 rounded-full bg-black/35 px-3.5 py-1.5 text-[12px] font-medium text-white backdrop-blur"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" /> Highlight
+            </button>
+          )}
+        </div>
       )}
 
       {!isMine && (
@@ -239,6 +251,16 @@ export function StoryViewer() {
             )}
           </div>
         </>
+      )}
+
+      {highlightSheetOpen && (
+        <AddToHighlightSheet
+          ownerId={author.id}
+          imageUrl={current.image_url}
+          videoUrl={current.video_url}
+          caption={current.caption}
+          onClose={() => setHighlightSheetOpen(false)}
+        />
       )}
     </div>
   );

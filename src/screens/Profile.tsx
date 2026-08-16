@@ -9,7 +9,8 @@ import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
 import {
   countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
-  listPostsByAuthor, listSavedPosts, listLikedPosts, toggleFollow, updateProfile, type SimplePost, type FeedPost,
+  listPostsByAuthor, listSavedPosts, listLikedPosts, toggleFollow, updateProfile, listStoryHighlights,
+  deleteStoryHighlight, type SimplePost, type FeedPost, type StoryHighlight,
 } from "../lib/api";
 import { uploadImage } from "../lib/storage";
 
@@ -49,6 +50,54 @@ function PostThumb({ p }: { p: ThumbPost }) {
   );
 }
 
+function HighlightCircle({
+  highlight,
+  canDelete,
+  onOpen,
+  onLongPress,
+}: {
+  highlight: StoryHighlight;
+  canDelete: boolean;
+  onOpen: () => void;
+  onLongPress: () => void;
+}) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const startPress = () => {
+    if (!canDelete) return;
+    longPressed.current = false;
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      onLongPress();
+    }, 450);
+  };
+  const cancelPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+
+  return (
+    <button
+      onPointerDown={startPress}
+      onPointerUp={cancelPress}
+      onPointerLeave={cancelPress}
+      onContextMenu={(e) => e.preventDefault()}
+      onClick={() => {
+        if (!longPressed.current) onOpen();
+      }}
+      className="flex w-16 shrink-0 select-none flex-col items-center gap-1.5"
+    >
+      {highlight.cover_image_url ? (
+        <img src={highlight.cover_image_url} alt="" className="h-14 w-14 rounded-full border border-white/15 object-cover" />
+      ) : (
+        <div className="flex h-14 w-14 items-center justify-center rounded-full chip">
+          <Grid3x3 className="h-5 w-5 text-mist" />
+        </div>
+      )}
+      <span className="w-16 truncate text-center text-[11px] text-mist">{highlight.title}</span>
+    </button>
+  );
+}
+
 export function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -67,6 +116,8 @@ export function Profile() {
   const [tab, setTab] = useState("posts");
   const [editing, setEditing] = useState(false);
   const [gifting, setGifting] = useState(false);
+  const [highlights, setHighlights] = useState<StoryHighlight[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<StoryHighlight | null>(null);
 
   const targetId = isMe ? user?.id : id;
   const displayProfile = isMe ? myProfile : viewedProfile;
@@ -86,7 +137,20 @@ export function Profile() {
       isFollowing(user.id, targetId).then(setFollowing);
       isFollowing(targetId, user.id).then(setFollowsMe);
     }
+    listStoryHighlights(targetId).then(setHighlights).catch(() => setHighlights([]));
   }, [targetId, isMe, user]);
+
+  const handleDeleteHighlight = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    setHighlights((prev) => prev.filter((h) => h.id !== target.id));
+    try {
+      await deleteStoryHighlight(target.id);
+    } catch {
+      if (targetId) listStoryHighlights(targetId).then(setHighlights);
+    }
+  };
 
   useEffect(() => {
     if (tab !== "saved" || !isMe || !user || savedPosts !== null) return;
@@ -230,6 +294,28 @@ export function Profile() {
       </div>
 
       {messageError && <p className="px-5 pt-2 text-center text-[12px] text-rose-400">{messageError}</p>}
+
+      {highlights.length > 0 && (
+        <div className="no-scrollbar mt-5 flex gap-4 overflow-x-auto px-5">
+          {highlights.map((h) => (
+            <HighlightCircle key={h.id} highlight={h} canDelete={isMe} onOpen={() => navigate(`/highlights/${h.id}`)} onLongPress={() => setDeleteTarget(h)} />
+          ))}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setDeleteTarget(null)} />
+          <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-[440px] overflow-hidden rounded-3xl glass-strong">
+            <button
+              onClick={handleDeleteHighlight}
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-[13.5px] font-medium text-rose-400 hover:bg-white/5"
+            >
+              Delete "{deleteTarget.title}"
+            </button>
+          </div>
+        </>
+      )}
 
       <div className="mt-6 flex justify-center gap-2 border-b border-white/5 px-5">
         {visibleTabs.map((t) => (

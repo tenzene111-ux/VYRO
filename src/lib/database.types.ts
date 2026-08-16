@@ -1026,6 +1026,63 @@ export type Database = {
         };
         Relationships: [];
       };
+      story_highlights: {
+        Row: {
+          id: string;
+          owner_id: string;
+          title: string;
+          cover_image_url: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title: string;
+          cover_image_url?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          title?: string;
+          cover_image_url?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      story_highlight_items: {
+        Row: {
+          id: string;
+          highlight_id: string;
+          image_url: string | null;
+          video_url: string | null;
+          caption: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          highlight_id: string;
+          image_url?: string | null;
+          video_url?: string | null;
+          caption?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          highlight_id?: string;
+          image_url?: string | null;
+          video_url?: string | null;
+          caption?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       story_views: {
         Row: {
           story_id: string;

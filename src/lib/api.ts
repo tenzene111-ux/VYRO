@@ -2083,6 +2083,88 @@ export async function removeCloseFriend(userId: string, friendId: string) {
   if (error) throw error;
 }
 
+// ---------- story highlights ----------
+// A highlight item snapshots a story's media/caption at the moment it's
+// added, rather than referencing the `stories` row live — that row's own
+// RLS makes it unreadable once expires_at passes, but a highlight is meant
+// to outlive that by design.
+
+export type StoryHighlight = {
+  id: string;
+  owner_id: string;
+  title: string;
+  cover_image_url: string | null;
+  position: number;
+  created_at: string;
+};
+
+export type StoryHighlightItem = {
+  id: string;
+  highlight_id: string;
+  image_url: string | null;
+  video_url: string | null;
+  caption: string | null;
+  position: number;
+  created_at: string;
+};
+
+export async function getStoryHighlight(highlightId: string): Promise<StoryHighlight | null> {
+  const { data, error } = await supabase.from("story_highlights").select("*").eq("id", highlightId).maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function listStoryHighlights(ownerId: string): Promise<StoryHighlight[]> {
+  const { data, error } = await supabase
+    .from("story_highlights")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listHighlightItems(highlightId: string): Promise<StoryHighlightItem[]> {
+  const { data, error } = await supabase
+    .from("story_highlight_items")
+    .select("*")
+    .eq("highlight_id", highlightId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createStoryHighlight(
+  ownerId: string,
+  title: string,
+  imageUrl: string | null,
+  videoUrl: string | null,
+  caption: string | null
+): Promise<string> {
+  const highlightId = crypto.randomUUID();
+  const { error: highlightError } = await supabase
+    .from("story_highlights")
+    .insert({ id: highlightId, owner_id: ownerId, title, cover_image_url: imageUrl });
+  if (highlightError) throw highlightError;
+  const { error: itemError } = await supabase
+    .from("story_highlight_items")
+    .insert({ highlight_id: highlightId, image_url: imageUrl, video_url: videoUrl, caption });
+  if (itemError) throw itemError;
+  return highlightId;
+}
+
+export async function addStoryToHighlight(highlightId: string, imageUrl: string | null, videoUrl: string | null, caption: string | null) {
+  const { error } = await supabase
+    .from("story_highlight_items")
+    .insert({ highlight_id: highlightId, image_url: imageUrl, video_url: videoUrl, caption });
+  if (error) throw error;
+}
+
+export async function deleteStoryHighlight(highlightId: string) {
+  const { error } = await supabase.from("story_highlights").delete().eq("id", highlightId);
+  if (error) throw error;
+}
+
 export type StoryViewer = { profile: Profile; viewed_at: string };
 
 export async function listStoryViewers(storyId: string): Promise<StoryViewer[]> {
