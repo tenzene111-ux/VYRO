@@ -473,6 +473,10 @@ export type Database = {
           file_name: string | null;
           file_size: number | null;
           poll_id: string | null;
+          location_lat: number | null;
+          location_lng: number | null;
+          location_label: string | null;
+          shared_profile_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -497,6 +501,10 @@ export type Database = {
           file_name?: string | null;
           file_size?: number | null;
           poll_id?: string | null;
+          location_lat?: number | null;
+          location_lng?: number | null;
+          location_label?: string | null;
+          shared_profile_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -521,6 +529,10 @@ export type Database = {
           file_name?: string | null;
           file_size?: number | null;
           poll_id?: string | null;
+          location_lat?: number | null;
+          location_lng?: number | null;
+          location_label?: string | null;
+          shared_profile_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

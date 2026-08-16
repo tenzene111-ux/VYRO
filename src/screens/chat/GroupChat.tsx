@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, BarChart3 } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -8,6 +8,10 @@ import { MessageActionSheet } from "../../components/MessageActionSheet";
 import { ChatMediaBubble } from "../../components/ChatMediaBubble";
 import { ChatPollBubble } from "../../components/ChatPollBubble";
 import { CreatePollSheet } from "../../components/CreatePollSheet";
+import { ChatLocationBubble } from "../../components/ChatLocationBubble";
+import { ChatContactBubble } from "../../components/ChatContactBubble";
+import { ContactPickerSheet } from "../../components/ContactPickerSheet";
+import { AttachMenu } from "../../components/AttachMenu";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
 import {
@@ -22,6 +26,8 @@ import {
   sendVideoMessageFile,
   sendFileMessage,
   sendPollMessage,
+  sendLocationMessage,
+  sendContactMessage,
   votePoll,
   closePoll,
   sendEncryptedGroupMessage,
@@ -90,6 +96,8 @@ export function GroupChat() {
   const [forwardMessageTarget, setForwardMessageTarget] = useState<ChatMessage | null>(null);
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [readPointers, setReadPointers] = useState<{ user_id: string; last_read_at: string }[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -193,7 +201,9 @@ export function GroupChat() {
       });
     });
     const unsubscribeUpdate = subscribeToMessageUpdates(convId, (updated) => {
-      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll } : m)) : prev));
+      setMessages((prev) =>
+        prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll, sharedProfile: m.sharedProfile } : m)) : prev
+      );
     });
     const unsubscribeReactions = subscribeToReactions(convId, () => {
       listMessages(convId).then(setMessages);
@@ -315,6 +325,30 @@ export function GroupChat() {
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
     await sendPollMessage(group.conversation_id, user.id, question, options, allowMultiple, replyToId);
+  };
+
+  const handleSendLocation = () => {
+    if (!group?.conversation_id || !user || !navigator.geolocation) return;
+    const convId = group.conversation_id;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        sendLocationMessage(convId, user.id, pos.coords.latitude, pos.coords.longitude, undefined, replyToId).catch(() => {});
+      },
+      () => {
+        // location permission denied or unavailable — nothing sent, no partial message left behind
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleShareContact = async (contact: Profile) => {
+    setContactPickerOpen(false);
+    if (!group?.conversation_id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendContactMessage(group.conversation_id, user.id, contact.id, replyToId);
   };
 
   const handleVote = async (message: ChatMessage, optionIds: string[]) => {
@@ -605,6 +639,10 @@ export function GroupChat() {
                     <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
                   ) : m.poll ? (
                     <ChatPollBubble poll={m.poll} mine={mine} userId={user?.id ?? ""} onVote={(ids) => handleVote(m, ids)} onClose={() => handleClosePoll(m)} />
+                  ) : m.location_lat != null && m.location_lng != null ? (
+                    <ChatLocationBubble lat={m.location_lat} lng={m.location_lng} label={m.location_label} mine={mine} />
+                  ) : m.sharedProfile ? (
+                    <ChatContactBubble profile={m.sharedProfile} mine={mine} />
                   ) : m.image_url || m.video_url || m.file_url ? (
                     <ChatMediaBubble message={m} mine={mine} />
                   ) : m.audio_url ? (
@@ -695,18 +733,11 @@ export function GroupChat() {
               }}
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => (uploading ? undefined : setAttachMenuOpen(true))}
               disabled={uploading}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist disabled:opacity-50"
             >
               {uploading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Paperclip className="h-4.5 w-4.5" />}
-            </button>
-            <button
-              onClick={() => setPollComposerOpen(true)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
-              title="Create a poll"
-            >
-              <BarChart3 className="h-4.5 w-4.5" />
             </button>
             <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
               <input
@@ -747,6 +778,20 @@ export function GroupChat() {
           onUnpin={() => handleUnpin(actionMessage)}
           onForward={() => handleOpenForward(actionMessage)}
         />
+      )}
+
+      {attachMenuOpen && (
+        <AttachMenu
+          onClose={() => setAttachMenuOpen(false)}
+          onFile={() => fileInputRef.current?.click()}
+          onPoll={() => setPollComposerOpen(true)}
+          onLocation={handleSendLocation}
+          onContact={() => setContactPickerOpen(true)}
+        />
+      )}
+
+      {contactPickerOpen && user && (
+        <ContactPickerSheet excludeId={user.id} onClose={() => setContactPickerOpen(false)} onPick={handleShareContact} />
       )}
 
       {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}

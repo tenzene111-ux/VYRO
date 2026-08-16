@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark, BarChart3 } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -8,6 +8,10 @@ import { MessageActionSheet } from "../../components/MessageActionSheet";
 import { ChatMediaBubble } from "../../components/ChatMediaBubble";
 import { ChatPollBubble } from "../../components/ChatPollBubble";
 import { CreatePollSheet } from "../../components/CreatePollSheet";
+import { ChatLocationBubble } from "../../components/ChatLocationBubble";
+import { ChatContactBubble } from "../../components/ChatContactBubble";
+import { ContactPickerSheet } from "../../components/ContactPickerSheet";
+import { AttachMenu } from "../../components/AttachMenu";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { useCall } from "../../context/CallContext";
 import {
@@ -21,6 +25,8 @@ import {
   sendVideoMessageFile,
   sendFileMessage,
   sendPollMessage,
+  sendLocationMessage,
+  sendContactMessage,
   votePoll,
   closePoll,
   forwardMessage,
@@ -87,6 +93,8 @@ export function Conversation() {
   const [forwardMessageTarget, setForwardMessageTarget] = useState<ChatMessage | null>(null);
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -118,7 +126,9 @@ export function Conversation() {
       markConversationRead(id, user.id).catch(() => {});
     });
     const unsubscribeUpdate = subscribeToMessageUpdates(id, (updated) => {
-      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll } : m)) : prev));
+      setMessages((prev) =>
+        prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.reactions, poll: m.poll, sharedProfile: m.sharedProfile } : m)) : prev
+      );
     });
     const unsubscribeReactions = subscribeToReactions(id, () => {
       listMessages(id).then(setMessages);
@@ -248,6 +258,29 @@ export function Conversation() {
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
     await sendPollMessage(id, user.id, question, options, allowMultiple, replyToId);
+  };
+
+  const handleSendLocation = () => {
+    if (!id || !user || !navigator.geolocation) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        sendLocationMessage(id, user.id, pos.coords.latitude, pos.coords.longitude, undefined, replyToId).catch(() => {});
+      },
+      () => {
+        // location permission denied or unavailable — nothing sent, no partial message left behind
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleShareContact = async (contact: Profile) => {
+    setContactPickerOpen(false);
+    if (!id || !user) return;
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
+    await sendContactMessage(id, user.id, contact.id, replyToId);
   };
 
   const handleVote = async (message: ChatMessage, optionIds: string[]) => {
@@ -574,21 +607,12 @@ export function Conversation() {
               }}
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => (uploading ? undefined : setAttachMenuOpen(true))}
               disabled={uploading}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist disabled:opacity-50"
             >
               {uploading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Paperclip className="h-4.5 w-4.5" />}
             </button>
-            {!isSelf && (
-              <button
-                onClick={() => setPollComposerOpen(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full chip text-mist"
-                title="Create a poll"
-              >
-                <BarChart3 className="h-4.5 w-4.5" />
-              </button>
-            )}
             <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
               <input
                 value={input}
@@ -637,6 +661,20 @@ export function Conversation() {
           onUnpin={() => handleUnpin(actionMessage)}
           onForward={() => handleOpenForward(actionMessage)}
         />
+      )}
+
+      {attachMenuOpen && (
+        <AttachMenu
+          onClose={() => setAttachMenuOpen(false)}
+          onFile={() => fileInputRef.current?.click()}
+          onPoll={() => setPollComposerOpen(true)}
+          onLocation={handleSendLocation}
+          onContact={() => setContactPickerOpen(true)}
+        />
+      )}
+
+      {contactPickerOpen && user && (
+        <ContactPickerSheet excludeId={user.id} onClose={() => setContactPickerOpen(false)} onPick={handleShareContact} />
       )}
 
       {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}
@@ -742,6 +780,10 @@ function Bubble({
           <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
         ) : message.poll ? (
           <ChatPollBubble poll={message.poll} mine={mine} userId={userId} onVote={onVote} onClose={onClosePoll} />
+        ) : message.location_lat != null && message.location_lng != null ? (
+          <ChatLocationBubble lat={message.location_lat} lng={message.location_lng} label={message.location_label} mine={mine} />
+        ) : message.sharedProfile ? (
+          <ChatContactBubble profile={message.sharedProfile} mine={mine} />
         ) : message.image_url || message.video_url || message.file_url ? (
           <ChatMediaBubble message={message} mine={mine} />
         ) : message.audio_url ? (

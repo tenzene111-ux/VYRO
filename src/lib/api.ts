@@ -646,7 +646,9 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   const { data: lastMessages } = await supabase
     .from("messages")
-    .select("conversation_id, sender_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, deleted_at, created_at")
+    .select(
+      "conversation_id, sender_id, text, audio_url, ciphertext, image_url, video_url, file_name, poll_id, location_lat, shared_profile_id, deleted_at, created_at"
+    )
     .in("conversation_id", conversationIds)
     .order("created_at", { ascending: false });
 
@@ -929,21 +931,33 @@ export type ChatMessage = {
   file_name: string | null;
   file_size: number | null;
   poll_id: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  location_label: string | null;
+  shared_profile_id: string | null;
   created_at: string;
   reactions: MessageReaction[];
   poll: Poll | null;
+  sharedProfile: Profile | null;
 };
 
 export function messagePreviewText(
-  m: Pick<ChatMessage, "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at"> & {
+  m: Pick<
+    ChatMessage,
+    "text" | "audio_url" | "image_url" | "video_url" | "file_name" | "ciphertext" | "deleted_at" | "location_lat" | "shared_profile_id"
+  > & {
     poll?: Pick<Poll, "question"> | null;
     poll_id?: string | null;
+    sharedProfile?: Pick<Profile, "name"> | null;
   }
 ): string {
   if (m.deleted_at) return "This message was deleted";
   if (m.text) return m.text;
   if (m.poll) return `📊 ${m.poll.question}`;
   if (m.poll_id) return "📊 Poll";
+  if (m.location_lat) return "📍 Location";
+  if (m.sharedProfile) return `👤 ${m.sharedProfile.name}`;
+  if (m.shared_profile_id) return "👤 Contact";
   if (m.image_url) return "📷 Photo";
   if (m.video_url) return "🎬 Video";
   if (m.file_name) return `📄 ${m.file_name}`;
@@ -1004,11 +1018,35 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
     }
   }
 
+  const sharedProfileIds = [...new Set(data.map((m) => m.shared_profile_id).filter((id): id is string => !!id))];
+  const sharedProfileById = new Map<string, Profile>();
+  if (sharedProfileIds.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("*").in("id", sharedProfileIds);
+    for (const p of profiles ?? []) sharedProfileById.set(p.id, p);
+  }
+
   return data.map((m) => ({
     ...m,
     reactions: reactionsByMessage.get(m.id) ?? [],
     poll: m.poll_id ? pollsById.get(m.poll_id) ?? null : null,
+    sharedProfile: m.shared_profile_id ? sharedProfileById.get(m.shared_profile_id) ?? null : null,
   }));
+}
+
+export async function sendLocationMessage(conversationId: string, senderId: string, lat: number, lng: number, label?: string, replyToId?: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, location_lat: lat, location_lng: lng, location_label: label ?? null, reply_to_id: replyToId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "📍 Location").catch(() => {});
+}
+
+export async function sendContactMessage(conversationId: string, senderId: string, contactId: string, replyToId?: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, shared_profile_id: contactId, reply_to_id: replyToId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, "👤 Contact").catch(() => {});
 }
 
 export async function sendPollMessage(
@@ -1147,6 +1185,10 @@ export async function deleteMessageForEveryone(messageId: string) {
       file_name: null,
       file_size: null,
       poll_id: null,
+      location_lat: null,
+      location_lng: null,
+      location_label: null,
+      shared_profile_id: null,
       pinned: false,
       deleted_at: new Date().toISOString(),
     })
@@ -1270,12 +1312,12 @@ export function subscribeToMessages(conversationId: string, onInsert: (message: 
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
       (payload) => {
-        const row = payload.new as Omit<ChatMessage, "reactions" | "poll">;
-        if (row.poll_id) {
-          fetchPoll(row.poll_id).then((poll) => onInsert({ ...row, reactions: [], poll }));
-        } else {
-          onInsert({ ...row, reactions: [], poll: null });
-        }
+        const row = payload.new as Omit<ChatMessage, "reactions" | "poll" | "sharedProfile">;
+        const pollPromise = row.poll_id ? fetchPoll(row.poll_id) : Promise.resolve(null);
+        const profilePromise = row.shared_profile_id ? getProfile(row.shared_profile_id) : Promise.resolve(null);
+        Promise.all([pollPromise, profilePromise]).then(([poll, sharedProfile]) =>
+          onInsert({ ...row, reactions: [], poll, sharedProfile })
+        );
       }
     )
     .subscribe();
