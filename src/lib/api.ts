@@ -593,8 +593,12 @@ export async function getConversationOther(conversationId: string, userId: strin
     .select("user_id")
     .eq("conversation_id", conversationId);
   const otherId = (members ?? []).find((m) => m.user_id !== userId)?.user_id;
-  if (!otherId) return null;
-  return getProfile(otherId);
+  if (otherId) return getProfile(otherId);
+  // No other member — this is either a not-yet-loaded conversation, or a
+  // Saved Messages (is_self) conversation whose only member is the viewer.
+  const { data: conv } = await supabase.from("conversations").select("is_self").eq("id", conversationId).maybeSingle();
+  if (conv?.is_self) return getProfile(userId);
+  return null;
 }
 
 export type ChatConversation = {
@@ -602,16 +606,22 @@ export type ChatConversation = {
   other: Profile;
   last_message: string | null;
   last_message_at: string | null;
+  is_self: boolean;
+  archived: boolean;
 };
 
 export async function listConversations(userId: string): Promise<ChatConversation[]> {
   const { data: memberships, error } = await supabase
     .from("conversation_members")
-    .select("conversation_id")
+    .select("conversation_id, archived")
     .eq("user_id", userId);
   if (error) throw error;
   const conversationIds = (memberships ?? []).map((m) => m.conversation_id);
   if (conversationIds.length === 0) return [];
+  const archivedByConversation = new Map((memberships ?? []).map((m) => [m.conversation_id, m.archived]));
+
+  const { data: conversations } = await supabase.from("conversations").select("id, is_self").in("id", conversationIds);
+  const isSelfByConversation = new Map((conversations ?? []).map((c) => [c.id, c.is_self]));
 
   const { data: allMembers } = await supabase
     .from("conversation_members")
@@ -623,7 +633,7 @@ export async function listConversations(userId: string): Promise<ChatConversatio
     if (m.user_id !== userId) otherIdByConversation.set(m.conversation_id, m.user_id);
   }
   const otherIds = [...new Set(otherIdByConversation.values())];
-  const { data: profiles } = await supabase.from("profiles").select("*").in("id", otherIds);
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", [...otherIds, userId]);
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
   const { data: lastMessages } = await supabase
@@ -639,7 +649,8 @@ export async function listConversations(userId: string): Promise<ChatConversatio
 
   return conversationIds
     .map((id) => {
-      const otherId = otherIdByConversation.get(id);
+      const isSelf = isSelfByConversation.get(id) ?? false;
+      const otherId = isSelf ? userId : otherIdByConversation.get(id);
       const other = otherId ? profileById.get(otherId) : undefined;
       if (!other) return null;
       const last = lastByConversation.get(id);
@@ -648,10 +659,38 @@ export async function listConversations(userId: string): Promise<ChatConversatio
         other,
         last_message: last ? messagePreviewText(last) : null,
         last_message_at: last?.created_at ?? null,
+        is_self: isSelf,
+        archived: archivedByConversation.get(id) ?? false,
       };
     })
     .filter((c): c is ChatConversation => c !== null)
     .sort((a, b) => (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""));
+}
+
+export async function getOrCreateSavedMessages(userId: string): Promise<string> {
+  const { data: existing } = await supabase
+    .from("conversation_members")
+    .select("conversation_id, conversations!inner(is_self)")
+    .eq("user_id", userId)
+    .eq("conversations.is_self", true)
+    .limit(1);
+  if (existing && existing.length > 0) return existing[0].conversation_id;
+
+  const conversationId = crypto.randomUUID();
+  const { error: convError } = await supabase.from("conversations").insert({ id: conversationId, is_group: false, is_self: true });
+  if (convError) throw convError;
+  const { error: memberError } = await supabase.from("conversation_members").insert({ conversation_id: conversationId, user_id: userId });
+  if (memberError) throw memberError;
+  return conversationId;
+}
+
+export async function setConversationArchived(userId: string, conversationId: string, archived: boolean) {
+  const { error } = await supabase
+    .from("conversation_members")
+    .update({ archived })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId);
+  if (error) throw error;
 }
 
 export async function getOrCreateConversationWith(userId: string, otherUserId: string): Promise<string> {

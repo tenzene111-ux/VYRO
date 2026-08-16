@@ -382,18 +382,21 @@ export type Database = {
         Row: {
           id: string;
           is_group: boolean;
+          is_self: boolean;
           title: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           is_group?: boolean;
+          is_self?: boolean;
           title?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           is_group?: boolean;
+          is_self?: boolean;
           title?: string | null;
           created_at?: string;
         };
@@ -405,18 +408,21 @@ export type Database = {
           user_id: string;
           joined_at: string;
           last_read_at: string;
+          archived: boolean;
         };
         Insert: {
           conversation_id: string;
           user_id: string;
           joined_at?: string;
           last_read_at?: string;
+          archived?: boolean;
         };
         Update: {
           conversation_id?: string;
           user_id?: string;
           joined_at?: string;
           last_read_at?: string;
+          archived?: boolean;
         };
         Relationships: [];
       };

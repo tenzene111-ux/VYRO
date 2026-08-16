@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -694,8 +694,14 @@ export function GroupChat() {
                   onClick={() => handleForwardTo(c.id)}
                   className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
                 >
-                  <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={38} />
-                  <span className="truncate text-[13.5px] font-medium text-ink">{c.other.name}</span>
+                  {c.is_self ? (
+                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full grad-purple-blue">
+                      <Bookmark className="h-4 w-4 text-white" fill="currentColor" />
+                    </div>
+                  ) : (
+                    <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={38} />
+                  )}
+                  <span className="truncate text-[13.5px] font-medium text-ink">{c.is_self ? "Saved Messages" : c.other.name}</span>
                 </button>
               ))
             )}

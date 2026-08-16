@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Forward, Check, CheckCheck, Paperclip, Bookmark } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -88,7 +88,8 @@ export function Conversation() {
   const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
 
-  const encryptionReady = !!(myPublicJwk && other?.public_key_jwk);
+  const isSelf = !!other && other.id === user?.id;
+  const encryptionReady = !isSelf && !!(myPublicJwk && other?.public_key_jwk);
   const pinnedMessage = messages?.find((m) => m.pinned && !m.deleted_at) ?? null;
   const visibleMessages = (messages ?? []).filter((m) => !hidden.has(m.id));
 
@@ -358,11 +359,19 @@ export function Conversation() {
         <button onClick={() => navigate(-1)} className="rounded-full p-1.5 text-mist hover:text-ink">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <Avatar name={other?.name ?? "…"} avatarUrl={other?.avatar_url} size={40} />
+        {isSelf ? (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-purple-blue">
+            <Bookmark className="h-4.5 w-4.5 text-white" fill="currentColor" />
+          </div>
+        ) : (
+          <Avatar name={other?.name ?? "…"} avatarUrl={other?.avatar_url} size={40} />
+        )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{other?.name ?? "Loading…"}</p>
+          <p className="truncate text-sm font-semibold text-ink">{isSelf ? "Saved Messages" : other?.name ?? "Loading…"}</p>
           <p className="flex items-center gap-1 text-[11px] text-mist">
-            {otherTyping ? (
+            {isSelf ? (
+              "Notes, links and messages to yourself"
+            ) : otherTyping ? (
               <span className="text-cyan-300">typing…</span>
             ) : (
               <>
@@ -372,7 +381,7 @@ export function Conversation() {
             )}
           </p>
         </div>
-        {other && (
+        {other && !isSelf && (
           <>
             <div className="relative">
               <button
@@ -572,8 +581,14 @@ export function Conversation() {
                   onClick={() => handleForwardTo(c.id)}
                   className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
                 >
-                  <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={38} />
-                  <span className="truncate text-[13.5px] font-medium text-ink">{c.other.name}</span>
+                  {c.is_self ? (
+                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full grad-purple-blue">
+                      <Bookmark className="h-4 w-4 text-white" fill="currentColor" />
+                    </div>
+                  ) : (
+                    <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={38} />
+                  )}
+                  <span className="truncate text-[13.5px] font-medium text-ink">{c.is_self ? "Saved Messages" : c.other.name}</span>
                 </button>
               ))
             )}
