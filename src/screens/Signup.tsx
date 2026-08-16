@@ -81,7 +81,7 @@ export function Signup() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-y-auto px-6 safe-top">
+    <div className="theme-dark-forced fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col overflow-y-auto px-6 safe-top">
       <BhutanSkyline />
       <div className="flex flex-col items-center pb-6 pt-8">
         <LogoMark size={44} />

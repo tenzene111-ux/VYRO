@@ -22,7 +22,7 @@ export function Splash() {
   }, [loading, session, navigate]);
 
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center">
+    <div className="theme-dark-forced fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col items-center justify-center">
       <BhutanSkyline />
       <motion.div
         initial={{ opacity: 0, scale: 0.6, rotate: -8 }}
