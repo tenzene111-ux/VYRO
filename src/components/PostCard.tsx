@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play, Bookmark } from "lucide-react";
+import { MoreHorizontal, MessageSquare, Share2, MapPin, BadgeCheck, Heart, Send, Loader2, Play, Bookmark, X } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { ReportModal } from "./ReportModal";
 import { useAuth } from "../context/AuthContext";
-import { addComment, listComments, toggleLike, toggleSavePost, type Comment, type FeedPost } from "../lib/api";
+import { addComment, listComments, toggleCommentLike, toggleLike, toggleSavePost, type Comment, type FeedPost } from "../lib/api";
 
 export function PostCard({ post }: { post: FeedPost }) {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   const [posting, setPosting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
 
   const handleLike = async () => {
     if (!user) return;
@@ -47,7 +48,7 @@ export function PostCard({ post }: { post: FeedPost }) {
   const handleOpenComments = async () => {
     setCommentsOpen((o) => !o);
     if (!comments) {
-      const list = await listComments(post.id);
+      const list = await listComments(post.id, user?.id);
       setComments(list);
     }
   };
@@ -56,13 +57,29 @@ export function PostCard({ post }: { post: FeedPost }) {
     if (!user || !commentText.trim()) return;
     setPosting(true);
     try {
-      await addComment(post.id, user.id, commentText.trim());
-      const list = await listComments(post.id);
+      await addComment(post.id, user.id, commentText.trim(), replyingTo?.id);
+      const list = await listComments(post.id, user.id);
       setComments(list);
-      setCommentCount(list.length);
+      setCommentCount(countComments(list));
       setCommentText("");
+      setReplyingTo(null);
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleToggleCommentLike = async (comment: Comment) => {
+    if (!user) return;
+    const wasLiked = comment.liked_by_me;
+    setComments((prev) =>
+      prev ? updateCommentTree(prev, comment.id, (c) => ({ ...c, liked_by_me: !wasLiked, like_count: c.like_count + (wasLiked ? -1 : 1) })) : prev
+    );
+    try {
+      await toggleCommentLike(comment.id, user.id, wasLiked);
+    } catch {
+      setComments((prev) =>
+        prev ? updateCommentTree(prev, comment.id, (c) => ({ ...c, liked_by_me: wasLiked, like_count: c.like_count + (wasLiked ? 1 : -1) })) : prev
+      );
     }
   };
 
@@ -172,24 +189,30 @@ export function PostCard({ post }: { post: FeedPost }) {
           ) : comments.length === 0 ? (
             <p className="py-2 text-center text-[12px] text-mist">No comments yet. Say something!</p>
           ) : (
-            <div className="flex flex-col gap-2.5">
+            <div className="no-scrollbar max-h-72 space-y-3 overflow-y-auto pr-0.5">
               {comments.map((c) => (
-                <div key={c.id} className="flex items-start gap-2.5">
-                  <Avatar name={c.author.name} size={28} />
-                  <div className="min-w-0 flex-1 rounded-2xl chip px-3 py-2">
-                    <p className="text-[11px] font-semibold text-violet-300">{c.author.name}</p>
-                    <p className="text-[12.5px] text-ink/90">{c.text}</p>
-                  </div>
-                </div>
+                <CommentRow key={c.id} comment={c} depth={0} onLike={handleToggleCommentLike} onReply={setReplyingTo} />
               ))}
             </div>
           )}
+
+          {replyingTo && (
+            <div className="mt-2.5 flex items-center justify-between rounded-full chip px-3.5 py-1.5 text-[12px] text-mist">
+              <span>
+                Replying to <span className="font-semibold text-ink">{replyingTo.name}</span>
+              </span>
+              <button onClick={() => setReplyingTo(null)} className="text-mist hover:text-ink">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="mt-3 flex items-center gap-2">
             <input
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSendComment()}
-              placeholder="Add a comment…"
+              placeholder={replyingTo ? `Reply to ${replyingTo.name}…` : "Add a comment…"}
               className="flex-1 rounded-full chip px-4 py-2 text-[13px] text-ink placeholder:text-mist focus:outline-none"
             />
             <button
@@ -206,6 +229,64 @@ export function PostCard({ post }: { post: FeedPost }) {
       {reportOpen && <ReportModal targetType="post" targetId={post.id} onClose={() => setReportOpen(false)} />}
     </article>
   );
+}
+
+function CommentRow({
+  comment,
+  depth,
+  onLike,
+  onReply,
+}: {
+  comment: Comment;
+  depth: number;
+  onLike: (c: Comment) => void;
+  onReply: (target: { id: string; name: string }) => void;
+}) {
+  return (
+    <div className={depth > 0 ? "ml-9" : ""}>
+      <div className="flex items-start gap-2.5">
+        <Avatar name={comment.author.name} size={depth > 0 ? 24 : 28} />
+        <div className="min-w-0 flex-1">
+          <div className="rounded-2xl chip px-3 py-2">
+            <p className="text-[11px] font-semibold text-violet-300">{comment.author.name}</p>
+            <p className="text-[12.5px] text-ink/90">{comment.text}</p>
+          </div>
+          <div className="mt-1 flex items-center gap-3 px-1 text-[11px] font-medium text-mist">
+            <span>{timeAgo(comment.created_at)}</span>
+            <button
+              onClick={() => onLike(comment)}
+              className={`flex items-center gap-1 ${comment.liked_by_me ? "text-rose-400" : "hover:text-ink"}`}
+            >
+              <Heart className={`h-3 w-3 ${comment.liked_by_me ? "fill-rose-400" : ""}`} />
+              {comment.like_count > 0 && formatCount(comment.like_count)}
+            </button>
+            <button onClick={() => onReply({ id: comment.id, name: comment.author.name })} className="hover:text-ink">
+              Reply
+            </button>
+          </div>
+        </div>
+      </div>
+      {comment.replies.length > 0 && (
+        <div className="mt-2.5 space-y-2.5">
+          {comment.replies.map((r) => (
+            <CommentRow key={r.id} comment={r} depth={depth + 1} onLike={onLike} onReply={onReply} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function countComments(list: Comment[]): number {
+  return list.reduce((sum, c) => sum + 1 + countComments(c.replies), 0);
+}
+
+function updateCommentTree(list: Comment[], id: string, updater: (c: Comment) => Comment): Comment[] {
+  return list.map((c) => {
+    if (c.id === id) return updater(c);
+    if (c.replies.length > 0) return { ...c, replies: updateCommentTree(c.replies, id, updater) };
+    return c;
+  });
 }
 
 function formatVideoDuration(sec: number) {

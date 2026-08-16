@@ -284,36 +284,78 @@ export type Comment = {
   id: string;
   post_id: string;
   text: string;
+  parent_id: string | null;
   created_at: string;
   author: Profile;
+  like_count: number;
+  liked_by_me: boolean;
+  replies: Comment[];
 };
 
-export async function listComments(postId: string): Promise<Comment[]> {
+export async function listComments(postId: string, currentUserId?: string): Promise<Comment[]> {
   const { data: comments, error } = await supabase
     .from("post_comments")
-    .select("id, post_id, text, created_at, author_id")
+    .select("id, post_id, text, parent_id, created_at, author_id")
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
   if (error) throw error;
   if (!comments || comments.length === 0) return [];
 
+  const commentIds = comments.map((c) => c.id);
   const authorIds = [...new Set(comments.map((c) => c.author_id))];
-  const { data: authors } = await supabase.from("profiles").select("*").in("id", authorIds);
+  const [{ data: authors }, { data: likes }] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIds),
+    supabase.from("comment_likes").select("comment_id, user_id").in("comment_id", commentIds),
+  ]);
   const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
+  const likesByComment = new Map<string, { count: number; mine: boolean }>();
+  for (const l of likes ?? []) {
+    const cur = likesByComment.get(l.comment_id) ?? { count: 0, mine: false };
+    cur.count += 1;
+    if (l.user_id === currentUserId) cur.mine = true;
+    likesByComment.set(l.comment_id, cur);
+  }
 
-  return comments
-    .map((c) => {
-      const author = authorById.get(c.author_id);
-      if (!author) return null;
-      return { id: c.id, post_id: c.post_id, text: c.text, created_at: c.created_at, author };
-    })
-    .filter((c): c is Comment => c !== null);
+  const byId = new Map<string, Comment>();
+  for (const c of comments) {
+    const author = authorById.get(c.author_id);
+    if (!author) continue;
+    const likeInfo = likesByComment.get(c.id) ?? { count: 0, mine: false };
+    byId.set(c.id, {
+      id: c.id,
+      post_id: c.post_id,
+      text: c.text,
+      parent_id: c.parent_id,
+      created_at: c.created_at,
+      author,
+      like_count: likeInfo.count,
+      liked_by_me: likeInfo.mine,
+      replies: [],
+    });
+  }
+
+  const topLevel: Comment[] = [];
+  for (const c of byId.values()) {
+    if (c.parent_id && byId.has(c.parent_id)) byId.get(c.parent_id)!.replies.push(c);
+    else topLevel.push(c);
+  }
+  return topLevel;
 }
 
-export async function addComment(postId: string, authorId: string, text: string) {
-  const { error } = await supabase.from("post_comments").insert({ post_id: postId, author_id: authorId, text });
+export async function addComment(postId: string, authorId: string, text: string, parentId?: string) {
+  const { error } = await supabase.from("post_comments").insert({ post_id: postId, author_id: authorId, text, parent_id: parentId ?? null });
   if (error) throw error;
   notifyPostAction(postId, authorId, "comment").catch(() => {});
+}
+
+export async function toggleCommentLike(commentId: string, userId: string, currentlyLiked: boolean) {
+  if (currentlyLiked) {
+    const { error } = await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", userId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: userId });
+    if (error) throw error;
+  }
 }
 
 export async function toggleLike(postId: string, userId: string, currentlyLiked: boolean) {

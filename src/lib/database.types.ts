@@ -261,6 +261,7 @@ export type Database = {
           post_id: string;
           author_id: string;
           text: string;
+          parent_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -268,6 +269,7 @@ export type Database = {
           post_id: string;
           author_id: string;
           text: string;
+          parent_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -275,6 +277,25 @@ export type Database = {
           post_id?: string;
           author_id?: string;
           text?: string;
+          parent_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      comment_likes: {
+        Row: {
+          comment_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          comment_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          comment_id?: string;
+          user_id?: string;
           created_at?: string;
         };
         Relationships: [];
