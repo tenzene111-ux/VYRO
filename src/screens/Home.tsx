@@ -8,11 +8,10 @@ import { useAuth, type Profile } from "../context/AuthContext";
 import { listFeedPosts, listActiveStories, listSeenStoryIds, listFollowing, type FeedPost, type StoryWithAuthor } from "../lib/api";
 import { rankForYou, filterFollowing } from "../lib/ranking";
 
-type Tab = "forYou" | "following" | "bhutan" | "trending";
+type Tab = "forYou" | "following" | "trending";
 const TABS: { id: Tab; label: string }[] = [
   { id: "forYou", label: "For You" },
   { id: "following", label: "Following" },
-  { id: "bhutan", label: "Bhutan" },
   { id: "trending", label: "Trending" },
 ];
 
@@ -47,9 +46,7 @@ export function Home() {
       ? rankForYou(allPosts, followingIds, user?.id ?? "")
       : tab === "following"
       ? filterFollowing(allPosts, followingIds, user?.id ?? "")
-      : tab === "trending"
-      ? [...allPosts].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count))
-      : [...allPosts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      : [...allPosts].sort((a, b) => b.like_count + b.comment_count - (a.like_count + a.comment_count));
 
   const videoPosts = tabFiltered?.filter((p) => p.video_url) ?? null;
   const posts = tabFiltered?.filter((p) => !p.video_url) ?? null;
