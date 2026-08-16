@@ -238,6 +238,30 @@ export async function listFeedPosts(currentUserId: string): Promise<FeedPost[]> 
   return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds);
 }
 
+export async function listFollowingFeed(currentUserId: string, authorIds: string[]): Promise<FeedPost[]> {
+  if (authorIds.length === 0) return [];
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("id, text, image_url, video_url, cover_url, video_duration_seconds, comments_enabled, visibility, remix_type, remix_of_post_id, created_at, edited_at, author_id")
+    .in("author_id", [...new Set(authorIds)])
+    .order("created_at", { ascending: false })
+    .limit(150);
+  if (error) throw error;
+  if (!posts || posts.length === 0) return [];
+
+  const authorIdsFound = [...new Set(posts.map((p) => p.author_id))];
+  const postIds = posts.map((p) => p.id);
+
+  const [{ data: authors }, { data: likes }, { data: comments }, savedPostIds] = await Promise.all([
+    supabase.from("profiles").select("*").in("id", authorIdsFound),
+    supabase.from("post_likes").select("post_id, user_id, reaction").in("post_id", postIds),
+    supabase.from("post_comments").select("post_id").in("post_id", postIds),
+    listSavedPostIds(currentUserId),
+  ]);
+
+  return hydrateFeedPosts(posts, authors ?? [], likes ?? [], comments ?? [], currentUserId, savedPostIds);
+}
+
 export async function listTopPosts(currentUserId: string, limit = 5): Promise<FeedPost[]> {
   const all = await listFeedPosts(currentUserId);
   return [...all].sort((a, b) => b.like_count - a.like_count).slice(0, limit);

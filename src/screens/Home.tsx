@@ -10,6 +10,7 @@ import {
   listActiveStories,
   listSeenStoryIds,
   listFollowing,
+  listFollowingFeed,
   listMyWatchSignals,
   listPostTexts,
   listProfiles,
@@ -19,7 +20,7 @@ import {
   type StoryWithAuthor,
   type TrendingHashtag,
 } from "../lib/api";
-import { buildInterestProfile, diversify, pickRisingCreators, rankForYou, rankTrending, filterFollowing } from "../lib/ranking";
+import { buildInterestProfile, diversify, pickRisingCreators, rankForYou, rankTrending } from "../lib/ranking";
 
 type Tab = "forYou" | "following" | "trending";
 const TABS: { id: Tab; label: string }[] = [
@@ -34,6 +35,7 @@ export function Home() {
   const navigate = useNavigate();
   const { user, profile: myProfile } = useAuth();
   const [allPosts, setAllPosts] = useState<FeedPost[] | null>(null);
+  const [followingPosts, setFollowingPosts] = useState<FeedPost[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>("forYou");
   const [followingMode, setFollowingMode] = useState<FollowingMode>("latest");
@@ -70,13 +72,20 @@ export function Home() {
   }, [user]);
 
   useEffect(() => {
-    if (!allPosts || !user) return;
+    if (!user) return;
+    listFollowingFeed(user.id, [...followingIds, user.id])
+      .then(setFollowingPosts)
+      .catch(() => setFollowingPosts([]));
+  }, [user, followingIds]);
+
+  useEffect(() => {
+    if (!followingPosts || !user) return;
     const lastSeen = Number(localStorage.getItem(`vyro-following-seen-${user.id}`) ?? 0);
-    const count = allPosts.filter(
-      (p) => p.author.id !== user.id && followingIds.has(p.author.id) && new Date(p.created_at).getTime() > lastSeen
+    const count = followingPosts.filter(
+      (p) => p.author.id !== user.id && new Date(p.created_at).getTime() > lastSeen
     ).length;
     setNewFollowingCount(count);
-  }, [allPosts, followingIds, user]);
+  }, [followingPosts, user]);
 
   const handleFollowSuggested = async (targetId: string) => {
     if (!user) return;
@@ -109,17 +118,17 @@ export function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const followingPosts = allPosts ? filterFollowing(allPosts, followingIds, user?.id ?? "") : [];
-
   const tabFiltered =
-    allPosts === null
+    tab === "following"
+      ? followingPosts === null
+        ? null
+        : followingMode === "latest"
+        ? followingPosts
+        : diversify(rankForYou(followingPosts, followingIds, user?.id ?? "", interestProfile))
+      : allPosts === null
       ? null
       : tab === "forYou"
       ? diversify(rankForYou(allPosts, followingIds, user?.id ?? "", interestProfile))
-      : tab === "following"
-      ? followingMode === "latest"
-        ? followingPosts
-        : diversify(rankForYou(followingPosts, followingIds, user?.id ?? "", interestProfile))
       : rankTrending(allPosts, myProfile?.location);
 
   const risingCreators = tab === "trending" && allPosts ? pickRisingCreators(allPosts, followingIds, user?.id ?? "") : [];
