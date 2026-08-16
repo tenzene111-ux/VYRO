@@ -2321,6 +2321,73 @@ export async function sendGift(receiverId: string, giftKey: string, coinCost: nu
   if (error) throw error;
 }
 
+// ---------- creator subscriptions ----------
+// A fan-support subscription is just a recurring coin transfer against the
+// same wallet send_gift() already spends from — there's no real payment
+// processor and no auto-renewal; renews_at simply marks when the fan needs
+// to tap Subscribe again to keep their access current.
+
+export type CreatorSubscription = {
+  id: string;
+  subscriber_id: string;
+  creator_id: string;
+  coin_cost: number;
+  started_at: string;
+  renews_at: string;
+};
+
+export async function setSubscriptionPrice(userId: string, priceCoins: number) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ subscription_price_coins: Math.max(0, Math.round(priceCoins)) })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+export async function subscribeToCreator(creatorId: string) {
+  const { error } = await supabase.rpc("subscribe_to_creator", { p_creator_id: creatorId });
+  if (error) throw error;
+}
+
+export async function getMySubscription(subscriberId: string, creatorId: string): Promise<CreatorSubscription | null> {
+  const { data } = await supabase
+    .from("creator_subscriptions")
+    .select("*")
+    .eq("subscriber_id", subscriberId)
+    .eq("creator_id", creatorId)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function listMySubscriptions(subscriberId: string): Promise<(CreatorSubscription & { creator: Profile })[]> {
+  const { data, error } = await supabase
+    .from("creator_subscriptions")
+    .select("*")
+    .eq("subscriber_id", subscriberId)
+    .order("renews_at", { ascending: false });
+  if (error) throw error;
+  const subs = data ?? [];
+  if (subs.length === 0) return [];
+
+  const creatorIds = [...new Set(subs.map((s) => s.creator_id))];
+  const { data: creators } = await supabase.from("profiles").select("*").in("id", creatorIds);
+  const creatorById = new Map((creators ?? []).map((p) => [p.id, p]));
+
+  return subs.flatMap((s) => {
+    const creator = creatorById.get(s.creator_id);
+    return creator ? [{ ...s, creator }] : [];
+  });
+}
+
+export async function countSubscribers(creatorId: string): Promise<number> {
+  const { count } = await supabase
+    .from("creator_subscriptions")
+    .select("*", { count: "exact", head: true })
+    .eq("creator_id", creatorId)
+    .gt("renews_at", new Date().toISOString());
+  return count ?? 0;
+}
+
 // ---------- creator studio ----------
 
 export type CreatorStats = {

@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Coins, ArrowDownLeft, ArrowUpRight, Loader2, Gift, Sparkles, Rocket, Award, Star,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { listTransactions, type CoinTransaction } from "../lib/api";
+import { Avatar } from "../components/Avatar";
+import { useAuth, type Profile } from "../context/AuthContext";
+import { listTransactions, listMySubscriptions, type CoinTransaction, type CreatorSubscription } from "../lib/api";
 
 const packages = [
   { coins: 170, price: 100 },
@@ -27,12 +28,14 @@ export function Wallet() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [transactions, setTransactions] = useState<CoinTransaction[] | null>(null);
+  const [subscriptions, setSubscriptions] = useState<(CreatorSubscription & { creator: Profile })[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile) return;
     listTransactions(profile.id).then(setTransactions);
+    listMySubscriptions(profile.id).then(setSubscriptions).catch(() => setSubscriptions([]));
   }, [profile]);
 
   return (
@@ -97,6 +100,33 @@ export function Wallet() {
 
           {notice && <p className="mt-3 text-center text-[12px] text-mist">{notice}</p>}
 
+          {subscriptions.length > 0 && (
+            <>
+              <h2 className="mb-3 mt-6 font-display text-[13px] font-semibold text-ink">Your Subscriptions</h2>
+              <div className="mb-2 overflow-hidden rounded-2xl glass-card">
+                {subscriptions.map((s) => {
+                  const active = new Date(s.renews_at) > new Date();
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => navigate(`/profile/${s.creator_id}`)}
+                      className="flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 text-left last:border-b-0"
+                    >
+                      <Avatar name={s.creator.name} avatarUrl={s.creator.avatar_url} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-ink">{s.creator.name}</p>
+                        <p className={`text-[11px] ${active ? "text-mist" : "text-amber-300"}`}>
+                          {active ? `Renews ${new Date(s.renews_at).toLocaleDateString()}` : "Expired — subscribe again to renew"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11.5px] font-semibold text-amber-300">🪙 {s.coin_cost}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           <div className="mt-5 grid grid-cols-3 gap-2.5">
             {packages.map((p) => (
               <button
@@ -139,6 +169,8 @@ export function Wallet() {
 function describeReason(reason: string) {
   if (reason.startsWith("gift_sent:")) return "Gift sent";
   if (reason.startsWith("gift_received:")) return "Gift received";
+  if (reason.startsWith("subscription_sent:")) return "Creator subscription";
+  if (reason.startsWith("subscription_received:")) return "New subscriber";
   if (reason === "signup_bonus") return "Welcome bonus";
   if (reason === "reward:daily_checkin") return "Daily check-in reward";
   if (reason === "reward:create_post") return "Post creation reward";

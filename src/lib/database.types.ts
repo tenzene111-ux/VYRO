@@ -17,6 +17,7 @@ export type Database = {
           referred_by: string | null;
           is_admin: boolean;
           status: string;
+          subscription_price_coins: number;
           created_at: string;
         };
         Insert: {
@@ -32,6 +33,7 @@ export type Database = {
           referred_by?: string | null;
           is_admin?: boolean;
           status?: string;
+          subscription_price_coins?: number;
           created_at?: string;
         };
         Update: {
@@ -47,7 +49,35 @@ export type Database = {
           referred_by?: string | null;
           is_admin?: boolean;
           status?: string;
+          subscription_price_coins?: number;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      creator_subscriptions: {
+        Row: {
+          id: string;
+          subscriber_id: string;
+          creator_id: string;
+          coin_cost: number;
+          started_at: string;
+          renews_at: string;
+        };
+        Insert: {
+          id?: string;
+          subscriber_id: string;
+          creator_id: string;
+          coin_cost: number;
+          started_at?: string;
+          renews_at: string;
+        };
+        Update: {
+          id?: string;
+          subscriber_id?: string;
+          creator_id?: string;
+          coin_cost?: number;
+          started_at?: string;
+          renews_at?: string;
         };
         Relationships: [];
       };
@@ -1650,6 +1680,10 @@ export type Database = {
       };
       send_gift: {
         Args: { p_receiver_id: string; p_gift_key: string; p_coin_cost: number; p_live_id?: string | null };
+        Returns: undefined;
+      };
+      subscribe_to_creator: {
+        Args: { p_creator_id: string };
         Returns: undefined;
       };
       is_live_host: {

@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Pencil, Grid3x3, Clapperboard, Bookmark, Heart, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2, QrCode, Users,
+  Pencil, Grid3x3, Clapperboard, Bookmark, Heart, BadgeCheck, MessageCircle, X, Check, Gift, Camera, Loader2, QrCode, Users, Sparkles,
 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { GiftPicker } from "../components/GiftPicker";
+import { SubscribeSheet } from "../components/SubscribeSheet";
 import { useAuth, type Profile as ProfileRow } from "../context/AuthContext";
 import { gradientFor } from "../lib/gradients";
 import {
   countFollowers, countFollowing, countPosts, getOrCreateConversationWith, getProfile, isFollowing,
   listPostsByAuthor, listSavedPosts, listLikedPosts, toggleFollow, updateProfile, listStoryHighlights,
-  deleteStoryHighlight, type SimplePost, type FeedPost, type StoryHighlight,
+  deleteStoryHighlight, getMySubscription, type SimplePost, type FeedPost, type StoryHighlight, type CreatorSubscription,
 } from "../lib/api";
 import { uploadImage } from "../lib/storage";
 
@@ -116,6 +117,8 @@ export function Profile() {
   const [tab, setTab] = useState("posts");
   const [editing, setEditing] = useState(false);
   const [gifting, setGifting] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [mySubscription, setMySubscription] = useState<CreatorSubscription | null>(null);
   const [highlights, setHighlights] = useState<StoryHighlight[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<StoryHighlight | null>(null);
 
@@ -136,6 +139,7 @@ export function Profile() {
     if (!isMe && user) {
       isFollowing(user.id, targetId).then(setFollowing);
       isFollowing(targetId, user.id).then(setFollowsMe);
+      getMySubscription(user.id, targetId).then(setMySubscription).catch(() => setMySubscription(null));
     }
     listStoryHighlights(targetId).then(setHighlights).catch(() => setHighlights([]));
   }, [targetId, isMe, user]);
@@ -164,6 +168,7 @@ export function Profile() {
 
   const visibleTabs = isMe ? tabs : tabs.filter((t) => t.id !== "saved" && t.id !== "liked");
   const videoPosts = posts.filter((p) => p.video_url);
+  const subscriptionActive = !!mySubscription && new Date(mySubscription.renews_at) > new Date();
 
   const handleToggleFollow = async () => {
     if (!user || !targetId) return;
@@ -293,6 +298,23 @@ export function Profile() {
         )}
       </div>
 
+      {!isMe && displayProfile.subscription_price_coins > 0 && (
+        <div className="px-5 pt-2">
+          <button
+            onClick={() => setSubscribing(true)}
+            disabled={subscriptionActive}
+            className={`flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-semibold ${
+              subscriptionActive ? "chip text-emerald-300" : "border border-violet-400/30 text-violet-300"
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            {subscriptionActive
+              ? `Subscribed until ${new Date(mySubscription!.renews_at).toLocaleDateString()}`
+              : `Subscribe — 🪙 ${displayProfile.subscription_price_coins.toLocaleString()}/mo`}
+          </button>
+        </div>
+      )}
+
       {messageError && <p className="px-5 pt-2 text-center text-[12px] text-rose-400">{messageError}</p>}
 
       {highlights.length > 0 && (
@@ -402,6 +424,20 @@ export function Profile() {
           myCoins={myProfile.coins}
           onClose={() => setGifting(false)}
           onSent={refreshProfile}
+        />
+      )}
+
+      {subscribing && !isMe && targetId && myProfile && (
+        <SubscribeSheet
+          creatorId={targetId}
+          creatorName={displayProfile.name}
+          priceCoins={displayProfile.subscription_price_coins}
+          myCoins={myProfile.coins}
+          onClose={() => setSubscribing(false)}
+          onSubscribed={async () => {
+            await refreshProfile();
+            getMySubscription(myProfile.id, targetId).then(setMySubscription).catch(() => {});
+          }}
         />
       )}
     </div>

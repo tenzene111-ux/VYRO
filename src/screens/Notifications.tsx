@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageSquare, UserPlus, Gift, Loader2, X, AtSign } from "lucide-react";
+import { Heart, MessageSquare, UserPlus, Gift, Loader2, X, AtSign, Sparkles } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -24,6 +24,7 @@ const iconFor: Record<string, typeof Heart> = {
   comment: MessageSquare,
   follow: UserPlus,
   gift: Gift,
+  subscription: Sparkles,
 };
 
 const colorFor: Record<string, string> = {
@@ -31,6 +32,7 @@ const colorFor: Record<string, string> = {
   comment: "text-cyan-400",
   follow: "text-blue-400",
   gift: "text-amber-300",
+  subscription: "text-violet-300",
 };
 
 const textFor: Record<string, string> = {
@@ -38,6 +40,7 @@ const textFor: Record<string, string> = {
   comment: "commented on your post",
   follow: "started following you",
   gift: "sent you a gift 🎁",
+  subscription: "subscribed to you ✨",
 };
 
 export function Notifications() {

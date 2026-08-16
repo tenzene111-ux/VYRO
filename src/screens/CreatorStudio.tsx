@@ -1,20 +1,43 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, FileText, Heart, MessageSquare, UserPlus, Loader2, Eye, PlayCircle, ChevronRight } from "lucide-react";
+import { ArrowLeft, Users, FileText, Heart, MessageSquare, UserPlus, Loader2, Eye, PlayCircle, ChevronRight, Coins, Check } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getCreatorStats, listMyVideoStats, type CreatorStats, type VideoPostStat } from "../lib/api";
+import { getCreatorStats, listMyVideoStats, setSubscriptionPrice, countSubscribers, type CreatorStats, type VideoPostStat } from "../lib/api";
 
 export function CreatorStudio() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [stats, setStats] = useState<CreatorStats | null>(null);
   const [videoStats, setVideoStats] = useState<VideoPostStat[] | null>(null);
+  const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
+  const [priceInput, setPriceInput] = useState("0");
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [priceSaved, setPriceSaved] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getCreatorStats(user.id).then(setStats);
     listMyVideoStats(user.id).then(setVideoStats).catch(() => setVideoStats([]));
+    countSubscribers(user.id).then(setSubscriberCount).catch(() => setSubscriberCount(0));
   }, [user]);
+
+  useEffect(() => {
+    if (profile) setPriceInput(String(profile.subscription_price_coins));
+  }, [profile]);
+
+  const handleSavePrice = async () => {
+    if (!user || savingPrice) return;
+    const price = Math.max(0, Math.round(Number(priceInput) || 0));
+    setSavingPrice(true);
+    try {
+      await setSubscriptionPrice(user.id, price);
+      await refreshProfile();
+      setPriceSaved(true);
+      setTimeout(() => setPriceSaved(false), 2000);
+    } finally {
+      setSavingPrice(false);
+    }
+  };
 
   return (
     <div className="min-h-svh bg-vyro-radial px-4 safe-top">
@@ -45,6 +68,44 @@ export function CreatorStudio() {
             <div>
               <p className="font-display text-lg font-bold text-ink">{stats.totalComments.toLocaleString()}</p>
               <p className="text-[11.5px] text-mist">Total comments received across all your posts</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl glass-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-ink">Fan subscriptions</p>
+              <span className="flex items-center gap-1 text-[11.5px] text-mist">
+                <Users className="h-3.5 w-3.5" /> {(subscriberCount ?? 0).toLocaleString()} subscribers
+              </span>
+            </div>
+            <p className="mb-2.5 text-[11.5px] text-mist">
+              Set a monthly coin price. Fans who subscribe pay it straight into your wallet — set to 0 to turn subscriptions off.
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 items-center gap-1.5 rounded-xl chip px-3 py-2">
+                <Coins className="h-4 w-4 text-amber-300" />
+                <input
+                  type="number"
+                  min={0}
+                  step={10}
+                  value={priceInput}
+                  onChange={(e) => setPriceInput(e.target.value)}
+                  className="w-full bg-transparent text-[13px] text-ink focus:outline-none"
+                />
+                <span className="shrink-0 text-[11px] text-mist">/ month</span>
+              </div>
+              <button
+                onClick={handleSavePrice}
+                disabled={savingPrice}
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl grad-purple-blue px-3.5 text-[12.5px] font-semibold text-white disabled:opacity-60"
+              >
+                {savingPrice ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : priceSaved ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : null}
+                {priceSaved ? "Saved" : "Save"}
+              </button>
             </div>
           </div>
 
