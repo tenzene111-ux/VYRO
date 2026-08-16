@@ -6,6 +6,7 @@ export const QUICK_REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"
 export function MessageActionSheet({
   message,
   mine,
+  canModerate,
   onClose,
   onReply,
   onReact,
@@ -19,6 +20,7 @@ export function MessageActionSheet({
 }: {
   message: ChatMessage;
   mine: boolean;
+  canModerate?: boolean;
   onClose: () => void;
   onReply: () => void;
   onReact: (emoji: string) => void;
@@ -66,7 +68,9 @@ export function MessageActionSheet({
             <SheetRow icon={Pin} label="Pin" onClick={() => act(onPin)} />
           ))}
         <SheetRow icon={Trash2} label="Delete for me" danger onClick={() => act(onDeleteForMe)} />
-        {mine && !message.deleted_at && <SheetRow icon={Trash2} label="Delete for everyone" danger onClick={() => act(onDeleteForEveryone)} />}
+        {(mine || canModerate) && !message.deleted_at && (
+          <SheetRow icon={Trash2} label="Delete for everyone" danger onClick={() => act(onDeleteForEveryone)} />
+        )}
       </div>
     </>
   );

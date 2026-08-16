@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -10,6 +10,7 @@ import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
 import {
   getGroup,
+  getMyGroupRole,
   leaveGroup,
   listMessages,
   listConversations,
@@ -23,6 +24,7 @@ import {
   editMessage,
   editEncryptedMessage,
   deleteMessageForEveryone,
+  adminDeleteGroupMessage,
   pinMessage,
   unpinMessage,
   toggleMessageReaction,
@@ -65,6 +67,7 @@ export function GroupChat() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [group, setGroup] = useState<Group | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [authors, setAuthors] = useState<Map<string, Profile>>(new Map());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -100,6 +103,11 @@ export function GroupChat() {
     if (!id) return;
     getGroup(id).then(setGroup);
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    getMyGroupRole(id, user.id).then(setMyRole);
+  }, [id, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -372,9 +380,11 @@ export function GroupChat() {
 
   const handleDeleteForEveryone = async (message: ChatMessage) => {
     if (!window.confirm("Delete this message for everyone?")) return;
+    const mine = message.sender_id === user?.id;
     setMessages((prev) => (prev ? prev.map((m) => (m.id === message.id ? { ...m, text: null, ciphertext: null, audio_url: null, deleted_at: new Date().toISOString() } : m)) : prev));
     try {
-      await deleteMessageForEveryone(message.id);
+      if (mine) await deleteMessageForEveryone(message.id);
+      else await adminDeleteGroupMessage(message.id);
     } catch {
       if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
     }
@@ -453,6 +463,15 @@ export function GroupChat() {
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-2xl glass-strong">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate(`/chat/group/${id}/info`);
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[13px] font-medium text-ink hover:bg-white/5"
+              >
+                <Info className="h-4 w-4" /> Group info
+              </button>
               {group && !group.encrypted && (
                 <button
                   onClick={handleEnableEncryption}
@@ -645,6 +664,7 @@ export function GroupChat() {
         <MessageActionSheet
           message={actionMessage}
           mine={actionMessage.sender_id === user?.id}
+          canModerate={myRole === "owner" || myRole === "admin"}
           onClose={() => setActionMessage(null)}
           onReply={() => setReplyingTo(actionMessage)}
           onReact={(emoji) => handleReact(actionMessage, emoji)}

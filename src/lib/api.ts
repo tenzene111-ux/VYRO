@@ -1160,6 +1160,72 @@ export async function getGroup(groupId: string): Promise<Group | null> {
   return withCounts[0] ?? null;
 }
 
+// ---------- group admin: roles, member management, bans ----------
+
+export async function getMyGroupRole(groupId: string, userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("group_members")
+    .select("role")
+    .eq("group_id", groupId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.role ?? null;
+}
+
+export async function listGroupMembersDetailed(groupId: string): Promise<(Profile & { role: string })[]> {
+  const { data: members, error } = await supabase.from("group_members").select("user_id, role").eq("group_id", groupId);
+  if (error) throw error;
+  const memberIds = (members ?? []).map((m) => m.user_id);
+  if (memberIds.length === 0) return [];
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", memberIds);
+  const roleById = new Map((members ?? []).map((m) => [m.user_id, m.role]));
+  return (profiles ?? []).map((p) => ({ ...p, role: roleById.get(p.id) ?? "member" }));
+}
+
+export async function listGroupBans(groupId: string): Promise<Profile[]> {
+  const { data: bans, error } = await supabase.from("group_bans").select("user_id").eq("group_id", groupId);
+  if (error) throw error;
+  const userIds = (bans ?? []).map((b) => b.user_id);
+  if (userIds.length === 0) return [];
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", userIds);
+  return profiles ?? [];
+}
+
+export async function promoteGroupAdmin(groupId: string, userId: string) {
+  const { error } = await supabase.rpc("promote_group_admin", { p_group_id: groupId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function demoteGroupAdmin(groupId: string, userId: string) {
+  const { error } = await supabase.rpc("demote_group_admin", { p_group_id: groupId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function removeGroupMember(groupId: string, userId: string) {
+  const { error } = await supabase.rpc("remove_group_member", { p_group_id: groupId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function banGroupMember(groupId: string, userId: string) {
+  const { error } = await supabase.rpc("ban_group_member", { p_group_id: groupId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function unbanGroupMember(groupId: string, userId: string) {
+  const { error } = await supabase.rpc("unban_group_member", { p_group_id: groupId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function updateGroupInfo(groupId: string, name: string, description: string) {
+  const { error } = await supabase.rpc("update_group_info", { p_group_id: groupId, p_name: name, p_description: description || null });
+  if (error) throw error;
+}
+
+export async function adminDeleteGroupMessage(messageId: string) {
+  const { error } = await supabase.rpc("admin_delete_group_message", { p_message_id: messageId });
+  if (error) throw error;
+}
+
 // ---------- group chat encryption ----------
 
 export type GroupMemberKey = { id: string; public_key_jwk: JsonWebKey | null };

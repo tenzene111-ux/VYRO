@@ -570,6 +570,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      group_bans: {
+        Row: {
+          group_id: string;
+          user_id: string;
+          banned_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          group_id: string;
+          user_id: string;
+          banned_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          group_id?: string;
+          user_id?: string;
+          banned_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       group_keys: {
         Row: {
           group_id: string;
@@ -1153,6 +1174,34 @@ export type Database = {
       };
       enable_group_encryption: {
         Args: { p_group_id: string };
+        Returns: undefined;
+      };
+      promote_group_admin: {
+        Args: { p_group_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      demote_group_admin: {
+        Args: { p_group_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      remove_group_member: {
+        Args: { p_group_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      ban_group_member: {
+        Args: { p_group_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      unban_group_member: {
+        Args: { p_group_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      update_group_info: {
+        Args: { p_group_id: string; p_name: string; p_description: string | null };
+        Returns: undefined;
+      };
+      admin_delete_group_message: {
+        Args: { p_message_id: string };
         Returns: undefined;
       };
       send_gift: {
