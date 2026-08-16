@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageSquare, UserPlus, Gift, Loader2, X } from "lucide-react";
+import { Heart, MessageSquare, UserPlus, Gift, Loader2, X, AtSign } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
 import {
   deleteNotification,
+  listCommentsOnMyPosts,
   listFollowing,
+  listMentionsOf,
   listNotifications,
   markAllNotificationsRead,
   subscribeToNotifications,
   toggleFollow,
+  type CommentActivity,
+  type MentionActivity,
   type NotificationRow,
 } from "../lib/api";
+
+type Tab = "all" | "comments" | "mentions";
 
 const iconFor: Record<string, typeof Heart> = {
   like: Heart,
@@ -36,9 +42,12 @@ const textFor: Record<string, string> = {
 
 export function Notifications() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const [tab, setTab] = useState<Tab>("all");
   const [notifications, setNotifications] = useState<NotificationRow[] | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [comments, setComments] = useState<CommentActivity[] | null>(null);
+  const [mentions, setMentions] = useState<MentionActivity[] | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -50,6 +59,16 @@ export function Notifications() {
     });
     return unsubscribe;
   }, [user]);
+
+  useEffect(() => {
+    if (!user || tab !== "comments" || comments !== null) return;
+    listCommentsOnMyPosts(user.id).then(setComments).catch(() => setComments([]));
+  }, [user, tab, comments]);
+
+  useEffect(() => {
+    if (!user || !profile || tab !== "mentions" || mentions !== null) return;
+    listMentionsOf(profile.username, user.id).then(setMentions).catch(() => setMentions([]));
+  }, [user, profile, tab, mentions]);
 
   const handleFollowBack = async (actorId: string) => {
     if (!user) return;
@@ -87,48 +106,137 @@ export function Notifications() {
         <h1 className="font-display text-xl font-bold text-ink">Notifications</h1>
       </header>
 
-      {notifications === null ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-5 w-5 animate-spin text-mist" />
+      <div className="mb-1 flex gap-2 px-4">
+        {([
+          ["all", "All"],
+          ["comments", "Comments"],
+          ["mentions", "Mentions"],
+        ] as [Tab, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
+              tab === id ? "grad-primary text-white" : "chip text-mist"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "all" &&
+        (notifications === null ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-mist" />
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <p className="font-display text-sm font-semibold text-ink">Nothing yet</p>
+            <p className="max-w-[240px] text-[12.5px] text-mist">
+              Likes, comments, follows and gifts will show up here.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col px-3 py-2">
+            {(() => {
+              const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+              const fresh = notifications.filter((n) => new Date(n.created_at).getTime() >= cutoff);
+              const earlier = notifications.filter((n) => new Date(n.created_at).getTime() < cutoff);
+              return (
+                <>
+                  {fresh.length > 0 && (
+                    <NotificationGroup
+                      label="New"
+                      items={fresh}
+                      onOpen={navigate}
+                      followingIds={followingIds}
+                      onFollowBack={handleFollowBack}
+                      onIgnore={handleIgnore}
+                    />
+                  )}
+                  {earlier.length > 0 && (
+                    <NotificationGroup
+                      label="Earlier"
+                      items={earlier}
+                      onOpen={navigate}
+                      followingIds={followingIds}
+                      onFollowBack={handleFollowBack}
+                      onIgnore={handleIgnore}
+                    />
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        ))}
+
+      {tab === "comments" && (
+        <div className="px-3 py-2">
+          {comments === null ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-mist" />
+            </div>
+          ) : comments.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <MessageSquare className="h-6 w-6 text-mist" />
+              <p className="font-display text-sm font-semibold text-ink">No comments yet</p>
+              <p className="max-w-[240px] text-[12.5px] text-mist">Comments on your posts will show up here.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {comments.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => navigate(`/profile/${c.author.id}`)}
+                  className="flex items-start gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                >
+                  <Avatar name={c.author.name} avatarUrl={c.author.avatar_url} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] text-ink/90">
+                      <span className="font-semibold text-ink">{c.author.name}</span> commented: {c.text}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-mist">on your post "{c.post_text || "…"}"</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-mist">{timeAgo(c.created_at)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      ) : notifications.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="font-display text-sm font-semibold text-ink">Nothing yet</p>
-          <p className="max-w-[240px] text-[12.5px] text-mist">
-            Likes, comments, follows and gifts will show up here.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col px-3 py-2">
-          {(() => {
-            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-            const fresh = notifications.filter((n) => new Date(n.created_at).getTime() >= cutoff);
-            const earlier = notifications.filter((n) => new Date(n.created_at).getTime() < cutoff);
-            return (
-              <>
-                {fresh.length > 0 && (
-                  <NotificationGroup
-                    label="New"
-                    items={fresh}
-                    onOpen={navigate}
-                    followingIds={followingIds}
-                    onFollowBack={handleFollowBack}
-                    onIgnore={handleIgnore}
-                  />
-                )}
-                {earlier.length > 0 && (
-                  <NotificationGroup
-                    label="Earlier"
-                    items={earlier}
-                    onOpen={navigate}
-                    followingIds={followingIds}
-                    onFollowBack={handleFollowBack}
-                    onIgnore={handleIgnore}
-                  />
-                )}
-              </>
-            );
-          })()}
+      )}
+
+      {tab === "mentions" && (
+        <div className="px-3 py-2">
+          {mentions === null ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-mist" />
+            </div>
+          ) : mentions.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <AtSign className="h-6 w-6 text-mist" />
+              <p className="font-display text-sm font-semibold text-ink">No mentions yet</p>
+              <p className="max-w-[240px] text-[12.5px] text-mist">When someone @mentions you, it'll show up here.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {mentions.map((m) => (
+                <button
+                  key={`${m.kind}-${m.id}`}
+                  onClick={() => navigate(`/profile/${m.author.id}`)}
+                  className="flex items-start gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                >
+                  <Avatar name={m.author.name} avatarUrl={m.author.avatar_url} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] text-ink/90">
+                      <span className="font-semibold text-ink">{m.author.name}</span> mentioned you in a{" "}
+                      {m.kind === "post" ? "post" : "comment"}: {m.text}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-mist">{timeAgo(m.created_at)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
