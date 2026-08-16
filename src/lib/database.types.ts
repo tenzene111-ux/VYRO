@@ -654,6 +654,135 @@ export type Database = {
         };
         Relationships: [];
       };
+      channels: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          privacy: string;
+          owner_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          privacy?: string;
+          owner_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          privacy?: string;
+          owner_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      channel_subscribers: {
+        Row: {
+          channel_id: string;
+          user_id: string;
+          role: string;
+          joined_at: string;
+        };
+        Insert: {
+          channel_id: string;
+          user_id: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Update: {
+          channel_id?: string;
+          user_id?: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Relationships: [];
+      };
+      channel_posts: {
+        Row: {
+          id: string;
+          channel_id: string;
+          author_id: string;
+          text: string | null;
+          image_url: string | null;
+          video_url: string | null;
+          pinned: boolean;
+          edited_at: string | null;
+          deleted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          channel_id: string;
+          author_id: string;
+          text?: string | null;
+          image_url?: string | null;
+          video_url?: string | null;
+          pinned?: boolean;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          channel_id?: string;
+          author_id?: string;
+          text?: string | null;
+          image_url?: string | null;
+          video_url?: string | null;
+          pinned?: boolean;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      channel_post_likes: {
+        Row: {
+          post_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          post_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          post_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      channel_post_comments: {
+        Row: {
+          id: string;
+          post_id: string;
+          author_id: string;
+          text: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          author_id: string;
+          text: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          author_id?: string;
+          text?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       groups: {
         Row: {
           id: string;
@@ -1340,6 +1469,42 @@ export type Database = {
       };
       admin_delete_group_message: {
         Args: { p_message_id: string };
+        Returns: undefined;
+      };
+      create_channel: {
+        Args: { p_name: string; p_description: string | null; p_privacy: string };
+        Returns: string;
+      };
+      join_channel: {
+        Args: { p_channel_id: string };
+        Returns: undefined;
+      };
+      leave_channel: {
+        Args: { p_channel_id: string };
+        Returns: undefined;
+      };
+      promote_channel_admin: {
+        Args: { p_channel_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      demote_channel_admin: {
+        Args: { p_channel_id: string; p_user_id: string };
+        Returns: undefined;
+      };
+      create_channel_post: {
+        Args: { p_channel_id: string; p_text: string | null; p_image_url: string | null; p_video_url: string | null };
+        Returns: string;
+      };
+      delete_channel_post: {
+        Args: { p_post_id: string };
+        Returns: undefined;
+      };
+      pin_channel_post: {
+        Args: { p_channel_id: string; p_post_id: string };
+        Returns: undefined;
+      };
+      unpin_channel_post: {
+        Args: { p_post_id: string };
         Returns: undefined;
       };
       create_poll: {

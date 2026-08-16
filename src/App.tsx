@@ -23,6 +23,7 @@ const ChatList = lazy(() => import("./screens/chat/ChatList").then((m) => ({ def
 
 const CreatePost = lazy(() => import("./screens/CreatePost").then((m) => ({ default: m.CreatePost })));
 const CreateGroup = lazy(() => import("./screens/CreateGroup").then((m) => ({ default: m.CreateGroup })));
+const CreateChannel = lazy(() => import("./screens/CreateChannel").then((m) => ({ default: m.CreateChannel })));
 const CreateEvent = lazy(() => import("./screens/CreateEvent").then((m) => ({ default: m.CreateEvent })));
 const CreateListing = lazy(() => import("./screens/CreateListing").then((m) => ({ default: m.CreateListing })));
 const CreateStory = lazy(() => import("./screens/CreateStory").then((m) => ({ default: m.CreateStory })));
@@ -61,6 +62,7 @@ const ChatSettingsTab = lazy(() => import("./screens/chat/ChatSettingsTab").then
 const Conversation = lazy(() => import("./screens/chat/Conversation").then((m) => ({ default: m.Conversation })));
 const GroupChat = lazy(() => import("./screens/chat/GroupChat").then((m) => ({ default: m.GroupChat })));
 const GroupInfo = lazy(() => import("./screens/chat/GroupInfo").then((m) => ({ default: m.GroupInfo })));
+const ChannelView = lazy(() => import("./screens/chat/ChannelView").then((m) => ({ default: m.ChannelView })));
 const ArchivedChats = lazy(() => import("./screens/chat/ArchivedChats").then((m) => ({ default: m.ArchivedChats })));
 const ChatFolders = lazy(() => import("./screens/chat/ChatFolders").then((m) => ({ default: m.ChatFolders })));
 const QRCodeScreen = lazy(() => import("./screens/chat/QRCode").then((m) => ({ default: m.QRCodeScreen })));
@@ -127,6 +129,7 @@ export default function App() {
                   <Route path="/chat/:id" element={<Conversation />} />
                   <Route path="/chat/group/:id" element={<GroupChat />} />
                   <Route path="/chat/group/:id/info" element={<GroupInfo />} />
+                  <Route path="/chat/channel/:id" element={<ChannelView />} />
                   <Route path="/chat/archived" element={<ArchivedChats />} />
                   <Route path="/chat/folders" element={<ChatFolders />} />
                   <Route path="/chat/qr" element={<QRCodeScreen />} />
@@ -140,6 +143,7 @@ export default function App() {
                   <Route path="/call/video/:id" element={<VideoCall />} />
                   <Route path="/create/post" element={<CreatePost />} />
                   <Route path="/create/group" element={<CreateGroup />} />
+                  <Route path="/create/channel" element={<CreateChannel />} />
                   <Route path="/create/community" element={<CreateCommunity />} />
                   <Route path="/create/event" element={<CreateEvent />} />
                   <Route path="/create/sell" element={<CreateListing />} />

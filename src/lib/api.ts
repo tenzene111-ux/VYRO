@@ -1591,6 +1591,211 @@ export async function adminDeleteGroupMessage(messageId: string) {
   if (error) throw error;
 }
 
+// ---------- channels ----------
+// A broadcast feed, not a chat: owner/admins post, subscribers view and
+// react/comment but can't post. No underlying conversation, unlike groups.
+
+export type Channel = {
+  id: string;
+  name: string;
+  description: string | null;
+  privacy: string;
+  owner_id: string;
+  created_at: string;
+  subscriber_count: number;
+};
+
+async function attachSubscriberCounts(channels: Database["public"]["Tables"]["channels"]["Row"][]): Promise<Channel[]> {
+  if (channels.length === 0) return [];
+  const { data: subs } = await supabase
+    .from("channel_subscribers")
+    .select("channel_id")
+    .in(
+      "channel_id",
+      channels.map((c) => c.id)
+    );
+  const counts = new Map<string, number>();
+  for (const s of subs ?? []) counts.set(s.channel_id, (counts.get(s.channel_id) ?? 0) + 1);
+  return channels.map((c) => ({ ...c, subscriber_count: counts.get(c.id) ?? 0 }));
+}
+
+export async function listMyChannels(userId: string): Promise<Channel[]> {
+  const { data: subs } = await supabase.from("channel_subscribers").select("channel_id").eq("user_id", userId);
+  const channelIds = (subs ?? []).map((s) => s.channel_id);
+  if (channelIds.length === 0) return [];
+  const { data, error } = await supabase.from("channels").select("*").in("id", channelIds);
+  if (error) throw error;
+  return attachSubscriberCounts(data ?? []);
+}
+
+export async function listDiscoverChannels(userId: string): Promise<Channel[]> {
+  const { data: subs } = await supabase.from("channel_subscribers").select("channel_id").eq("user_id", userId);
+  const mySubIds = (subs ?? []).map((s) => s.channel_id);
+  let query = supabase.from("channels").select("*").eq("privacy", "public");
+  if (mySubIds.length > 0) query = query.not("id", "in", `(${mySubIds.join(",")})`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return attachSubscriberCounts(data ?? []);
+}
+
+export async function getChannel(channelId: string): Promise<Channel | null> {
+  const { data, error } = await supabase.from("channels").select("*").eq("id", channelId).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const [channel] = await attachSubscriberCounts([data]);
+  return channel;
+}
+
+export async function getMyChannelRole(channelId: string, userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("channel_subscribers")
+    .select("role")
+    .eq("channel_id", channelId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.role ?? null;
+}
+
+export async function listChannelSubscribers(channelId: string): Promise<(Profile & { role: string })[]> {
+  const { data: subs, error } = await supabase.from("channel_subscribers").select("user_id, role").eq("channel_id", channelId);
+  if (error) throw error;
+  const userIds = (subs ?? []).map((s) => s.user_id);
+  if (userIds.length === 0) return [];
+  const { data: profiles } = await supabase.from("profiles").select("*").in("id", userIds);
+  const roleById = new Map((subs ?? []).map((s) => [s.user_id, s.role]));
+  return (profiles ?? []).map((p) => ({ ...p, role: roleById.get(p.id) ?? "subscriber" }));
+}
+
+export async function createChannel(name: string, description: string, privacy: "public" | "private"): Promise<string> {
+  const { data, error } = await supabase.rpc("create_channel", { p_name: name, p_description: description || null, p_privacy: privacy });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function joinChannel(channelId: string) {
+  const { error } = await supabase.rpc("join_channel", { p_channel_id: channelId });
+  if (error) throw error;
+}
+
+export async function leaveChannel(channelId: string) {
+  const { error } = await supabase.rpc("leave_channel", { p_channel_id: channelId });
+  if (error) throw error;
+}
+
+export async function promoteChannelAdmin(channelId: string, userId: string) {
+  const { error } = await supabase.rpc("promote_channel_admin", { p_channel_id: channelId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export async function demoteChannelAdmin(channelId: string, userId: string) {
+  const { error } = await supabase.rpc("demote_channel_admin", { p_channel_id: channelId, p_user_id: userId });
+  if (error) throw error;
+}
+
+export type ChannelPost = {
+  id: string;
+  channel_id: string;
+  author_id: string;
+  text: string | null;
+  image_url: string | null;
+  video_url: string | null;
+  pinned: boolean;
+  edited_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  like_count: number;
+  liked_by_me: boolean;
+  comment_count: number;
+};
+
+export async function listChannelPosts(channelId: string, viewerId: string): Promise<ChannelPost[]> {
+  const { data, error } = await supabase
+    .from("channel_posts")
+    .select("*")
+    .eq("channel_id", channelId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const postIds = data.map((p) => p.id);
+  const [{ data: likes }, { data: comments }] = await Promise.all([
+    supabase.from("channel_post_likes").select("post_id, user_id").in("post_id", postIds),
+    supabase.from("channel_post_comments").select("post_id").in("post_id", postIds),
+  ]);
+  const likeCounts = new Map<string, number>();
+  const likedByMe = new Set<string>();
+  for (const l of likes ?? []) {
+    likeCounts.set(l.post_id, (likeCounts.get(l.post_id) ?? 0) + 1);
+    if (l.user_id === viewerId) likedByMe.add(l.post_id);
+  }
+  const commentCounts = new Map<string, number>();
+  for (const c of comments ?? []) commentCounts.set(c.post_id, (commentCounts.get(c.post_id) ?? 0) + 1);
+
+  return data.map((p) => ({
+    ...p,
+    like_count: likeCounts.get(p.id) ?? 0,
+    liked_by_me: likedByMe.has(p.id),
+    comment_count: commentCounts.get(p.id) ?? 0,
+  }));
+}
+
+export async function createChannelPost(channelId: string, text: string, imageUrl?: string, videoUrl?: string): Promise<string> {
+  const { data, error } = await supabase.rpc("create_channel_post", {
+    p_channel_id: channelId,
+    p_text: text || null,
+    p_image_url: imageUrl ?? null,
+    p_video_url: videoUrl ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function deleteChannelPost(postId: string) {
+  const { error } = await supabase.rpc("delete_channel_post", { p_post_id: postId });
+  if (error) throw error;
+}
+
+export async function pinChannelPost(channelId: string, postId: string) {
+  const { error } = await supabase.rpc("pin_channel_post", { p_channel_id: channelId, p_post_id: postId });
+  if (error) throw error;
+}
+
+export async function unpinChannelPost(postId: string) {
+  const { error } = await supabase.rpc("unpin_channel_post", { p_post_id: postId });
+  if (error) throw error;
+}
+
+export async function toggleChannelPostLike(postId: string, userId: string, liked: boolean) {
+  if (liked) {
+    const { error } = await supabase.from("channel_post_likes").insert({ post_id: postId, user_id: userId });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("channel_post_likes").delete().eq("post_id", postId).eq("user_id", userId);
+    if (error) throw error;
+  }
+}
+
+export type ChannelPostComment = { id: string; post_id: string; author_id: string; text: string; created_at: string; author: Profile };
+
+export async function listChannelPostComments(postId: string): Promise<ChannelPostComment[]> {
+  const { data, error } = await supabase
+    .from("channel_post_comments")
+    .select("*")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+  const authorIds = [...new Set(data.map((c) => c.author_id))];
+  const { data: authors } = await supabase.from("profiles").select("*").in("id", authorIds);
+  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
+  return data.map((c) => ({ ...c, author: authorById.get(c.author_id)! })).filter((c) => !!c.author);
+}
+
+export async function addChannelPostComment(postId: string, authorId: string, text: string) {
+  const { error } = await supabase.from("channel_post_comments").insert({ post_id: postId, author_id: authorId, text });
+  if (error) throw error;
+}
+
 // ---------- group chat encryption ----------
 
 export type GroupMemberKey = { id: string; public_key_jwk: JsonWebKey | null };
