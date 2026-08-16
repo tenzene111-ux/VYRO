@@ -60,6 +60,11 @@ const GroupsTab = lazy(() => import("./screens/chat/GroupsTab").then((m) => ({ d
 const ChatSettingsTab = lazy(() => import("./screens/chat/ChatSettingsTab").then((m) => ({ default: m.ChatSettingsTab })));
 const Conversation = lazy(() => import("./screens/chat/Conversation").then((m) => ({ default: m.Conversation })));
 const GroupChat = lazy(() => import("./screens/chat/GroupChat").then((m) => ({ default: m.GroupChat })));
+const AccountDetails = lazy(() => import("./screens/chat/AccountDetails").then((m) => ({ default: m.AccountDetails })));
+const NotificationSettings = lazy(() => import("./screens/chat/NotificationSettings").then((m) => ({ default: m.NotificationSettings })));
+const DataStorage = lazy(() => import("./screens/chat/DataStorage").then((m) => ({ default: m.DataStorage })));
+const TwoFactorAuth = lazy(() => import("./screens/chat/TwoFactorAuth").then((m) => ({ default: m.TwoFactorAuth })));
+const HelpCenter = lazy(() => import("./screens/chat/HelpCenter").then((m) => ({ default: m.HelpCenter })));
 
 function RouteFallback() {
   return (
@@ -117,6 +122,11 @@ export default function App() {
 
                   <Route path="/chat/:id" element={<Conversation />} />
                   <Route path="/chat/group/:id" element={<GroupChat />} />
+                  <Route path="/settings/account" element={<AccountDetails />} />
+                  <Route path="/settings/notifications" element={<NotificationSettings />} />
+                  <Route path="/settings/data" element={<DataStorage />} />
+                  <Route path="/settings/security" element={<TwoFactorAuth />} />
+                  <Route path="/settings/help" element={<HelpCenter />} />
                   <Route path="/stories/:userId" element={<StoryViewer />} />
                   <Route path="/call/voice/:id" element={<VoiceCall />} />
                   <Route path="/call/video/:id" element={<VideoCall />} />

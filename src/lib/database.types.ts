@@ -404,16 +404,43 @@ export type Database = {
           conversation_id: string;
           user_id: string;
           joined_at: string;
+          last_read_at: string;
         };
         Insert: {
           conversation_id: string;
           user_id: string;
           joined_at?: string;
+          last_read_at?: string;
         };
         Update: {
           conversation_id?: string;
           user_id?: string;
           joined_at?: string;
+          last_read_at?: string;
+        };
+        Relationships: [];
+      };
+      message_reactions: {
+        Row: {
+          message_id: string;
+          conversation_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+        };
+        Insert: {
+          message_id: string;
+          conversation_id: string;
+          user_id: string;
+          emoji: string;
+          created_at?: string;
+        };
+        Update: {
+          message_id?: string;
+          conversation_id?: string;
+          user_id?: string;
+          emoji?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -429,6 +456,11 @@ export type Database = {
           iv: string | null;
           sender_public_key_jwk: Json | null;
           recipient_public_key_jwk: Json | null;
+          reply_to_id: string | null;
+          edited_at: string | null;
+          deleted_at: string | null;
+          pinned: boolean;
+          forwarded: boolean;
           created_at: string;
         };
         Insert: {
@@ -442,6 +474,11 @@ export type Database = {
           iv?: string | null;
           sender_public_key_jwk?: Json | null;
           recipient_public_key_jwk?: Json | null;
+          reply_to_id?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          pinned?: boolean;
+          forwarded?: boolean;
           created_at?: string;
         };
         Update: {
@@ -455,6 +492,11 @@ export type Database = {
           iv?: string | null;
           sender_public_key_jwk?: Json | null;
           recipient_public_key_jwk?: Json | null;
+          reply_to_id?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+          pinned?: boolean;
+          forwarded?: boolean;
           created_at?: string;
         };
         Relationships: [];

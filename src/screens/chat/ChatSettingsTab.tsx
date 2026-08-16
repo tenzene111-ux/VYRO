@@ -65,7 +65,7 @@ export function ChatSettingsTab() {
       </button>
 
       <SettingsGroup title="Account">
-        <Row icon={User} label="Account details" onClick={() => {}} />
+        <Row icon={User} label="Account details" onClick={() => navigate("/settings/account")} />
         <Row icon={Wallet} label="VYRO Wallet" onClick={() => navigate("/wallet")} />
         <Row icon={Sparkles} label="Creator Studio" onClick={() => navigate("/studio")} />
         <Row icon={Users2} label="Community" onClick={() => navigate("/community")} />
@@ -74,7 +74,7 @@ export function ChatSettingsTab() {
 
       <SettingsGroup title="Preferences">
         <ThemeRow value={theme} onChange={handleThemeChange} />
-        <Row icon={Bell} label="Notifications" onClick={() => {}} />
+        <Row icon={Bell} label="Notifications" onClick={() => navigate("/settings/notifications")} />
         <LanguageRow value={language} onChange={handleLanguageChange} />
       </SettingsGroup>
 
@@ -82,7 +82,7 @@ export function ChatSettingsTab() {
         <Row icon={Lock} label="Privacy Center" onClick={() => navigate("/privacy")} />
         <ToggleRow icon={EyeOff} label="Read receipts" value={readReceipts} onChange={setReadReceipts} />
         <ToggleRow icon={Fingerprint} label="Biometric lock" value={biometric} onChange={setBiometric} />
-        <Row icon={Shield} label="Two-factor authentication" onClick={() => {}} />
+        <Row icon={Shield} label="Two-factor authentication" onClick={() => navigate("/settings/security")} />
       </SettingsGroup>
 
       {profile?.is_admin && (
@@ -92,8 +92,8 @@ export function ChatSettingsTab() {
       )}
 
       <SettingsGroup title="Support">
-        <Row icon={Database} label="Data & storage" onClick={() => {}} />
-        <Row icon={HelpCircle} label="Help center" onClick={() => {}} />
+        <Row icon={Database} label="Data & storage" onClick={() => navigate("/settings/data")} />
+        <Row icon={HelpCircle} label="Help center" onClick={() => navigate("/settings/help")} />
       </SettingsGroup>
 
       <SettingsGroup title="More">

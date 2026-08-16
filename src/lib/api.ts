@@ -707,6 +707,8 @@ export async function getOrCreateConversationWith(userId: string, otherUserId: s
   return conversationId;
 }
 
+export type MessageReaction = { user_id: string; emoji: string };
+
 export type ChatMessage = {
   id: string;
   conversation_id: string;
@@ -718,7 +720,13 @@ export type ChatMessage = {
   iv: string | null;
   sender_public_key_jwk: Database["public"]["Tables"]["messages"]["Row"]["sender_public_key_jwk"];
   recipient_public_key_jwk: Database["public"]["Tables"]["messages"]["Row"]["recipient_public_key_jwk"];
+  reply_to_id: string | null;
+  edited_at: string | null;
+  deleted_at: string | null;
+  pinned: boolean;
+  forwarded: boolean;
   created_at: string;
+  reactions: MessageReaction[];
 };
 
 export async function listMessages(conversationId: string): Promise<ChatMessage[]> {
@@ -728,11 +736,34 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  if (!data || data.length === 0) return [];
+
+  const { data: reactions } = await supabase
+    .from("message_reactions")
+    .select("message_id, user_id, emoji")
+    .eq("conversation_id", conversationId);
+  const reactionsByMessage = new Map<string, MessageReaction[]>();
+  for (const r of reactions ?? []) {
+    const cur = reactionsByMessage.get(r.message_id) ?? [];
+    cur.push({ user_id: r.user_id, emoji: r.emoji });
+    reactionsByMessage.set(r.message_id, cur);
+  }
+
+  return data.map((m) => ({ ...m, reactions: reactionsByMessage.get(m.id) ?? [] }));
 }
 
-export async function sendMessage(conversationId: string, senderId: string, text: string) {
-  const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: senderId, text });
+export async function sendMessage(conversationId: string, senderId: string, text: string, replyToId?: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, text, reply_to_id: replyToId ?? null });
+  if (error) throw error;
+  notifyConversationMembers(conversationId, senderId, text).catch(() => {});
+}
+
+export async function forwardMessage(conversationId: string, senderId: string, text: string) {
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: senderId, text, forwarded: true });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, text).catch(() => {});
 }
@@ -741,11 +772,16 @@ export async function sendVoiceMessage(
   conversationId: string,
   senderId: string,
   audioUrl: string,
-  durationSeconds: number
+  durationSeconds: number,
+  replyToId?: string
 ) {
-  const { error } = await supabase
-    .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, audio_url: audioUrl, audio_duration_seconds: durationSeconds });
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    audio_url: audioUrl,
+    audio_duration_seconds: durationSeconds,
+    reply_to_id: replyToId ?? null,
+  });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🎤 Voice message").catch(() => {});
 }
@@ -761,7 +797,8 @@ export async function sendEncryptedMessage(
   ciphertext: string,
   iv: string,
   senderPublicJwk: JsonWebKey,
-  recipientPublicJwk: JsonWebKey
+  recipientPublicJwk: JsonWebKey,
+  replyToId?: string
 ) {
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -770,10 +807,88 @@ export async function sendEncryptedMessage(
     iv,
     sender_public_key_jwk: senderPublicJwk as unknown as Database["public"]["Tables"]["profiles"]["Row"]["public_key_jwk"],
     recipient_public_key_jwk: recipientPublicJwk as unknown as Database["public"]["Tables"]["profiles"]["Row"]["public_key_jwk"],
+    reply_to_id: replyToId ?? null,
   });
   if (error) throw error;
   // never leak plaintext through the push notification pipeline for an end-to-end encrypted message
   notifyConversationMembers(conversationId, senderId, "🔒 New message").catch(() => {});
+}
+
+export async function editMessage(messageId: string, text: string) {
+  const { error } = await supabase.from("messages").update({ text, edited_at: new Date().toISOString() }).eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function editEncryptedMessage(messageId: string, ciphertext: string, iv: string) {
+  const { error } = await supabase
+    .from("messages")
+    .update({ ciphertext, iv, edited_at: new Date().toISOString() })
+    .eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function deleteMessageForEveryone(messageId: string) {
+  const { error } = await supabase
+    .from("messages")
+    .update({
+      text: null,
+      audio_url: null,
+      audio_duration_seconds: null,
+      ciphertext: null,
+      iv: null,
+      pinned: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function pinMessage(conversationId: string, messageId: string) {
+  await supabase.from("messages").update({ pinned: false }).eq("conversation_id", conversationId).eq("pinned", true);
+  const { error } = await supabase.from("messages").update({ pinned: true }).eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function unpinMessage(messageId: string) {
+  const { error } = await supabase.from("messages").update({ pinned: false }).eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function toggleMessageReaction(
+  messageId: string,
+  conversationId: string,
+  userId: string,
+  emoji: string | null,
+  currentEmoji: string | null
+) {
+  if (emoji === null || emoji === currentEmoji) {
+    const { error } = await supabase.from("message_reactions").delete().eq("message_id", messageId).eq("user_id", userId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase
+    .from("message_reactions")
+    .upsert({ message_id: messageId, conversation_id: conversationId, user_id: userId, emoji }, { onConflict: "message_id,user_id" });
+  if (error) throw error;
+}
+
+export async function markConversationRead(conversationId: string, userId: string) {
+  const { error } = await supabase
+    .from("conversation_members")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function getOtherLastRead(conversationId: string, otherUserId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("conversation_members")
+    .select("last_read_at")
+    .eq("conversation_id", conversationId)
+    .eq("user_id", otherUserId)
+    .maybeSingle();
+  return data?.last_read_at ?? null;
 }
 
 export function subscribeToMessages(conversationId: string, onInsert: (message: ChatMessage) => void) {
@@ -782,12 +897,75 @@ export function subscribeToMessages(conversationId: string, onInsert: (message: 
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
-      (payload) => onInsert(payload.new as ChatMessage)
+      (payload) => onInsert({ ...(payload.new as Omit<ChatMessage, "reactions">), reactions: [] })
     )
     .subscribe();
 
   return () => {
     supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToMessageUpdates(conversationId: string, onUpdate: (message: ChatMessage) => void) {
+  const channel = supabase
+    .channel(`message-updates:${conversationId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
+      (payload) => onUpdate(payload.new as ChatMessage)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToReactions(conversationId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`reactions:${conversationId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "message_reactions", filter: `conversation_id=eq.${conversationId}` },
+      () => onChange()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToReadReceipts(conversationId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`read-receipts:${conversationId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "conversation_members", filter: `conversation_id=eq.${conversationId}` },
+      () => onChange()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// Broadcast needs one subscribed channel shared between sending and
+// listening — a fresh unsubscribed channel per send() won't deliver.
+export function createTypingChannel(conversationId: string, onTyping: (userId: string) => void) {
+  const channel = supabase
+    .channel(`typing:${conversationId}`)
+    .on("broadcast", { event: "typing" }, ({ payload }) => onTyping((payload as { userId: string }).userId))
+    .subscribe();
+
+  return {
+    sendTyping: (userId: string) => {
+      channel.send({ type: "broadcast", event: "typing", payload: { userId } });
+    },
+    unsubscribe: () => {
+      supabase.removeChannel(channel);
+    },
   };
 }
 

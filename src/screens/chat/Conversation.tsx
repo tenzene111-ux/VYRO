@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages } from "lucide-react";
+import {
+  ArrowLeft, Phone, Video, Send, Loader2, Lock, Sparkles, Languages, Pin, X, Reply as ReplyIcon,
+  Copy, Pencil, Trash2, Forward, Check, CheckCheck,
+} from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -9,15 +12,49 @@ import { useCall } from "../../context/CallContext";
 import {
   getConversationOther,
   listMessages,
+  listConversations,
   sendMessage,
   sendVoiceMessage,
   sendEncryptedMessage,
+  forwardMessage,
+  editMessage,
+  editEncryptedMessage,
+  deleteMessageForEveryone,
+  pinMessage,
+  unpinMessage,
+  toggleMessageReaction,
+  markConversationRead,
+  getOtherLastRead,
   publishPublicKey,
   subscribeToMessages,
+  subscribeToMessageUpdates,
+  subscribeToReactions,
+  subscribeToReadReceipts,
+  createTypingChannel,
+  type ChatConversation,
   type ChatMessage,
 } from "../../lib/api";
 import { ensureKeyPair, deriveSharedKey, encryptText, decryptText } from "../../lib/crypto";
 import { suggestChatReplies, translateText, TRANSLATE_LANGUAGES } from "../../lib/ai";
+
+const QUICK_REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
+const TYPING_IDLE_MS = 3000;
+
+function hiddenKey(userId: string) {
+  return `vyro-hidden-messages-${userId}`;
+}
+
+function loadHidden(userId: string): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(hiddenKey(userId)) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveHidden(userId: string, ids: Set<string>) {
+  localStorage.setItem(hiddenKey(userId), JSON.stringify([...ids]));
+}
 
 async function resolveMessageText(message: ChatMessage, mine: boolean): Promise<string | null> {
   if (message.text) return message.text;
@@ -40,6 +77,7 @@ export function Conversation() {
   const { startCall } = useCall();
   const [other, setOther] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [input, setInput] = useState("");
   const [voiceRecording, setVoiceRecording] = useState(false);
   const [myPublicJwk, setMyPublicJwk] = useState<JsonWebKey | null>(null);
@@ -48,18 +86,76 @@ export function Conversation() {
   const [translateOn, setTranslateOn] = useState(false);
   const [targetLang, setTargetLang] = useState(() => localStorage.getItem("vyro-translate-lang") ?? "en");
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
+  const [forwardMessageTarget, setForwardMessageTarget] = useState<ChatMessage | null>(null);
+  const [forwardConversations, setForwardConversations] = useState<ChatConversation[] | null>(null);
+  const [otherLastRead, setOtherLastRead] = useState<string | null>(null);
+  const [otherTyping, setOtherTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const typingChannelRef = useRef<ReturnType<typeof createTypingChannel> | null>(null);
+  const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
 
   const encryptionReady = !!(myPublicJwk && other?.public_key_jwk);
+  const pinnedMessage = messages?.find((m) => m.pinned && !m.deleted_at) ?? null;
+  const visibleMessages = (messages ?? []).filter((m) => !hidden.has(m.id));
+
+  useEffect(() => {
+    if (!user) return;
+    setHidden(loadHidden(user.id));
+  }, [user]);
 
   useEffect(() => {
     if (!id || !user) return;
     getConversationOther(id, user.id).then(setOther);
     listMessages(id).then(setMessages);
-    const unsubscribe = subscribeToMessages(id, (message) => {
+    getOtherLastRead(id, user.id).then(() => {});
+    markConversationRead(id, user.id).catch(() => {});
+
+    const unsubscribeInsert = subscribeToMessages(id, (message) => {
       setMessages((prev) => (prev ? [...prev, message] : [message]));
+      markConversationRead(id, user.id).catch(() => {});
     });
-    return unsubscribe;
+    const unsubscribeUpdate = subscribeToMessageUpdates(id, (updated) => {
+      setMessages((prev) => (prev ? prev.map((m) => (m.id === updated.id ? { ...updated, reactions: m.id === updated.id ? m.reactions : [] } : m)) : prev));
+    });
+    const unsubscribeReactions = subscribeToReactions(id, () => {
+      listMessages(id).then(setMessages);
+    });
+    const unsubscribeReads = subscribeToReadReceipts(id, () => {
+      getConversationOther(id, user.id).then((o) => {
+        if (o) getOtherLastRead(id, o.id).then(setOtherLastRead);
+      });
+    });
+
+    return () => {
+      unsubscribeInsert();
+      unsubscribeUpdate();
+      unsubscribeReactions();
+      unsubscribeReads();
+    };
+  }, [id, user]);
+
+  useEffect(() => {
+    if (!id || !other) return;
+    getOtherLastRead(id, other.id).then(setOtherLastRead);
+  }, [id, other]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    typingChannelRef.current = createTypingChannel(id, (userId) => {
+      if (userId === user.id) return;
+      setOtherTyping(true);
+      if (typingClearRef.current) clearTimeout(typingClearRef.current);
+      typingClearRef.current = setTimeout(() => setOtherTyping(false), TYPING_IDLE_MS);
+    });
+    return () => {
+      typingChannelRef.current?.unsubscribe();
+      typingChannelRef.current = null;
+      if (typingClearRef.current) clearTimeout(typingClearRef.current);
+    };
   }, [id, user]);
 
   useEffect(() => {
@@ -72,29 +168,65 @@ export function Conversation() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [visibleMessages.length]);
+
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    if (!id || !user) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > 1500) {
+      lastTypingSentRef.current = now;
+      typingChannelRef.current?.sendTyping(user.id);
+    }
+  };
 
   const send = async () => {
     if (!input.trim() || !id || !user) return;
     const text = input.trim();
+
+    if (editingMessage) {
+      setInput("");
+      const target = editingMessage;
+      setEditingMessage(null);
+      if (target.ciphertext && other?.public_key_jwk) {
+        try {
+          const { keyPair } = await ensureKeyPair();
+          const sharedKey = await deriveSharedKey(keyPair.privateKey, other.public_key_jwk as unknown as JsonWebKey);
+          const { ciphertext, iv } = await encryptText(sharedKey, text);
+          await editEncryptedMessage(target.id, ciphertext, iv);
+        } catch {
+          // leave the original message untouched if re-encryption failed
+        }
+      } else {
+        await editMessage(target.id, text);
+      }
+      setMessages((prev) =>
+        prev ? prev.map((m) => (m.id === target.id ? { ...m, text: target.ciphertext ? m.text : text, edited_at: new Date().toISOString() } : m)) : prev
+      );
+      return;
+    }
+
     setInput("");
+    const replyToId = replyingTo?.id;
+    setReplyingTo(null);
     if (encryptionReady && other?.public_key_jwk) {
       try {
         const { keyPair } = await ensureKeyPair();
         const sharedKey = await deriveSharedKey(keyPair.privateKey, other.public_key_jwk as unknown as JsonWebKey);
         const { ciphertext, iv } = await encryptText(sharedKey, text);
-        await sendEncryptedMessage(id, user.id, ciphertext, iv, myPublicJwk!, other.public_key_jwk as unknown as JsonWebKey);
+        await sendEncryptedMessage(id, user.id, ciphertext, iv, myPublicJwk!, other.public_key_jwk as unknown as JsonWebKey, replyToId);
         return;
       } catch {
         // encryption failed unexpectedly — fall back to plaintext rather than losing the message
       }
     }
-    await sendMessage(id, user.id, text);
+    await sendMessage(id, user.id, text, replyToId);
   };
 
   const handleSendVoice = async (audioUrl: string, durationSeconds: number) => {
     if (!id || !user) return;
-    await sendVoiceMessage(id, user.id, audioUrl, durationSeconds);
+    await sendVoiceMessage(id, user.id, audioUrl, durationSeconds, replyingTo?.id);
+    setReplyingTo(null);
   };
 
   const handleSuggestReplies = async () => {
@@ -128,6 +260,94 @@ export function Conversation() {
     navigate(`/call/${kind}/${other.id}`, { state: { name: other.name } });
   };
 
+  const handleReact = async (message: ChatMessage, emoji: string) => {
+    if (!user || !id) return;
+    const current = message.reactions.find((r) => r.user_id === user.id)?.emoji ?? null;
+    const next = current === emoji ? null : emoji;
+    setMessages((prev) =>
+      prev
+        ? prev.map((m) =>
+            m.id === message.id
+              ? { ...m, reactions: [...m.reactions.filter((r) => r.user_id !== user.id), ...(next ? [{ user_id: user.id, emoji: next }] : [])] }
+              : m
+          )
+        : prev
+    );
+    try {
+      await toggleMessageReaction(message.id, id, user.id, next, current);
+    } catch {
+      listMessages(id).then(setMessages);
+    }
+  };
+
+  const handleCopy = async (message: ChatMessage) => {
+    const text = await resolveMessageText(message, message.sender_id === user?.id);
+    if (text) await navigator.clipboard.writeText(text).catch(() => {});
+  };
+
+  const handleEdit = async (message: ChatMessage) => {
+    const text = await resolveMessageText(message, true);
+    if (text === null) return;
+    setEditingMessage(message);
+    setReplyingTo(null);
+    setInput(text);
+  };
+
+  const handleDeleteForMe = (message: ChatMessage) => {
+    if (!user) return;
+    setHidden((prev) => {
+      const next = new Set(prev).add(message.id);
+      saveHidden(user.id, next);
+      return next;
+    });
+  };
+
+  const handleDeleteForEveryone = async (message: ChatMessage) => {
+    if (!window.confirm("Delete this message for everyone?")) return;
+    setMessages((prev) => (prev ? prev.map((m) => (m.id === message.id ? { ...m, text: null, ciphertext: null, audio_url: null, deleted_at: new Date().toISOString() } : m)) : prev));
+    try {
+      await deleteMessageForEveryone(message.id);
+    } catch {
+      listMessages(id!).then(setMessages);
+    }
+  };
+
+  const handlePin = async (message: ChatMessage) => {
+    if (!id) return;
+    setMessages((prev) => (prev ? prev.map((m) => ({ ...m, pinned: m.id === message.id })) : prev));
+    try {
+      await pinMessage(id, message.id);
+    } catch {
+      listMessages(id).then(setMessages);
+    }
+  };
+
+  const handleUnpin = async (message: ChatMessage) => {
+    setMessages((prev) => (prev ? prev.map((m) => (m.id === message.id ? { ...m, pinned: false } : m)) : prev));
+    try {
+      await unpinMessage(message.id);
+    } catch {
+      listMessages(id!).then(setMessages);
+    }
+  };
+
+  const handleOpenForward = (message: ChatMessage) => {
+    setForwardMessageTarget(message);
+    if (!forwardConversations && user) listConversations(user.id).then(setForwardConversations);
+  };
+
+  const handleForwardTo = async (destConversationId: string) => {
+    if (!user || !forwardMessageTarget) return;
+    const text = await resolveMessageText(forwardMessageTarget, forwardMessageTarget.sender_id === user.id);
+    setForwardMessageTarget(null);
+    if (!text) return;
+    await forwardMessage(destConversationId, user.id, text);
+  };
+
+  const scrollToMessage = (messageId: string) => {
+    document.getElementById(`msg-${messageId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <div className="fixed inset-0 z-30 mx-auto flex max-w-[480px] flex-col bg-vyro-radial">
       <header className="flex items-center gap-3 border-b border-white/5 px-3 py-3 safe-top">
@@ -138,8 +358,14 @@ export function Conversation() {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{other?.name ?? "Loading…"}</p>
           <p className="flex items-center gap-1 text-[11px] text-mist">
-            {encryptionReady && <Lock className="h-2.5 w-2.5 text-emerald-400" />}
-            {encryptionReady ? "End-to-end encrypted" : `@${other?.username ?? ""}`}
+            {otherTyping ? (
+              <span className="text-cyan-300">typing…</span>
+            ) : (
+              <>
+                {encryptionReady && <Lock className="h-2.5 w-2.5 text-emerald-400" />}
+                {encryptionReady ? "End-to-end encrypted" : `@${other?.username ?? ""}`}
+              </>
+            )}
           </p>
         </div>
         {other && (
@@ -176,17 +402,39 @@ export function Conversation() {
         )}
       </header>
 
+      {pinnedMessage && (
+        <button
+          onClick={() => scrollToMessage(pinnedMessage.id)}
+          className="flex items-center gap-2 border-b border-white/5 bg-white/[0.03] px-3.5 py-2 text-left"
+        >
+          <Pin className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink/80">
+            {pinnedMessage.text ?? (pinnedMessage.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
+          </span>
+        </button>
+      )}
+
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {messages === null ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-mist" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : visibleMessages.length === 0 ? (
           <p className="py-16 text-center text-[13px] text-mist">Say hello 👋</p>
         ) : (
           <div className="flex flex-col gap-2.5">
-            {messages.map((m) => (
-              <Bubble key={m.id} message={m} mine={m.sender_id === user?.id} translateOn={translateOn} targetLang={targetLang} />
+            {visibleMessages.map((m) => (
+              <Bubble
+                key={m.id}
+                message={m}
+                mine={m.sender_id === user?.id}
+                translateOn={translateOn}
+                targetLang={targetLang}
+                allMessages={messages}
+                read={m.sender_id === user?.id && !!otherLastRead && new Date(m.created_at) <= new Date(otherLastRead)}
+                onOpenActions={() => setActionMessage(m)}
+                onJumpToReply={scrollToMessage}
+              />
             ))}
           </div>
         )}
@@ -216,12 +464,35 @@ export function Conversation() {
         </div>
       )}
 
+      {(replyingTo || editingMessage) && (
+        <div className="flex items-center justify-between gap-2 border-t border-white/5 px-3.5 py-2">
+          <div className="min-w-0 flex-1 border-l-2 border-cyan-400 pl-2.5">
+            <p className="text-[11px] font-semibold text-cyan-300">{editingMessage ? "Editing message" : `Replying to ${replyingTo?.sender_id === user?.id ? "yourself" : other?.name ?? ""}`}</p>
+            <p className="truncate text-[12px] text-mist">
+              {(editingMessage ?? replyingTo)?.text ?? ((editingMessage ?? replyingTo)?.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setReplyingTo(null);
+              if (editingMessage) {
+                setEditingMessage(null);
+                setInput("");
+              }
+            }}
+            className="shrink-0 rounded-full p-1.5 text-mist hover:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 border-t border-white/5 px-3 py-3 safe-bottom">
         {!voiceRecording && (
           <div className="flex flex-1 items-center gap-2 rounded-full chip px-3.5 py-2.5">
             <input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send()}
               placeholder="Type a message..."
               className="flex-1 bg-transparent text-sm text-ink placeholder:text-mist focus:outline-none"
@@ -243,13 +514,145 @@ export function Conversation() {
             onClick={send}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full grad-primary text-white transition-transform active:scale-95"
           >
-            <Send className="h-4.5 w-4.5" />
+            {editingMessage ? <Check className="h-4.5 w-4.5" /> : <Send className="h-4.5 w-4.5" />}
           </button>
         ) : (
           <VoiceRecorder onSend={handleSendVoice} onRecordingChange={setVoiceRecording} />
         )}
       </div>
+
+      {actionMessage && (
+        <MessageActionSheet
+          message={actionMessage}
+          mine={actionMessage.sender_id === user?.id}
+          onClose={() => setActionMessage(null)}
+          onReply={() => setReplyingTo(actionMessage)}
+          onReact={(emoji) => handleReact(actionMessage, emoji)}
+          onCopy={() => handleCopy(actionMessage)}
+          onEdit={() => handleEdit(actionMessage)}
+          onDeleteForMe={() => handleDeleteForMe(actionMessage)}
+          onDeleteForEveryone={() => handleDeleteForEveryone(actionMessage)}
+          onPin={() => handlePin(actionMessage)}
+          onUnpin={() => handleUnpin(actionMessage)}
+          onForward={() => handleOpenForward(actionMessage)}
+        />
+      )}
+
+      {forwardMessageTarget && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setForwardMessageTarget(null)} />
+          <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-h-[60vh] max-w-[440px] overflow-y-auto rounded-3xl glass-strong p-3">
+            <p className="mb-2 px-1.5 py-1 text-[13px] font-semibold text-ink">Forward to…</p>
+            {forwardConversations === null ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-4 w-4 animate-spin text-mist" />
+              </div>
+            ) : (
+              forwardConversations.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => handleForwardTo(c.id)}
+                  className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-white/5"
+                >
+                  <Avatar name={c.other.name} avatarUrl={c.other.avatar_url} size={38} />
+                  <span className="truncate text-[13.5px] font-medium text-ink">{c.other.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function MessageActionSheet({
+  message,
+  mine,
+  onClose,
+  onReply,
+  onReact,
+  onCopy,
+  onEdit,
+  onDeleteForMe,
+  onDeleteForEveryone,
+  onPin,
+  onUnpin,
+  onForward,
+}: {
+  message: ChatMessage;
+  mine: boolean;
+  onClose: () => void;
+  onReply: () => void;
+  onReact: (emoji: string) => void;
+  onCopy: () => void;
+  onEdit: () => void;
+  onDeleteForMe: () => void;
+  onDeleteForEveryone: () => void;
+  onPin: () => void;
+  onUnpin: () => void;
+  onForward: () => void;
+}) {
+  const canEdit = mine && !message.deleted_at && !message.audio_url;
+  const act = (fn: () => void) => {
+    fn();
+    onClose();
+  };
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      <div className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-[440px] overflow-hidden rounded-3xl glass-strong">
+        <div className="flex items-center justify-center gap-2 border-b border-white/10 px-3 py-3">
+          {QUICK_REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => act(() => onReact(emoji))}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl transition-transform hover:scale-125"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        {!message.deleted_at && (
+          <SheetRow icon={ReplyIcon} label="Reply" onClick={() => act(onReply)} />
+        )}
+        {!message.deleted_at && !message.audio_url && <SheetRow icon={Copy} label="Copy" onClick={() => act(onCopy)} />}
+        {canEdit && <SheetRow icon={Pencil} label="Edit" onClick={() => act(onEdit)} />}
+        {!message.deleted_at && <SheetRow icon={Forward} label="Forward" onClick={() => act(onForward)} />}
+        {!message.deleted_at &&
+          (message.pinned ? (
+            <SheetRow icon={Pin} label="Unpin" onClick={() => act(onUnpin)} />
+          ) : (
+            <SheetRow icon={Pin} label="Pin" onClick={() => act(onPin)} />
+          ))}
+        <SheetRow icon={Trash2} label="Delete for me" danger onClick={() => act(onDeleteForMe)} />
+        {mine && !message.deleted_at && <SheetRow icon={Trash2} label="Delete for everyone" danger onClick={() => act(onDeleteForEveryone)} />}
+      </div>
+    </>
+  );
+}
+
+function SheetRow({
+  icon: Icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: typeof Pin;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left text-[13.5px] font-medium last:border-b-0 hover:bg-white/5 ${
+        danger ? "text-rose-400" : "text-ink"
+      }`}
+    >
+      <Icon className="h-4.5 w-4.5" />
+      {label}
+    </button>
   );
 }
 
@@ -258,28 +661,80 @@ function Bubble({
   mine,
   translateOn,
   targetLang,
+  allMessages,
+  read,
+  onOpenActions,
+  onJumpToReply,
 }: {
   message: ChatMessage;
   mine: boolean;
   translateOn: boolean;
   targetLang: string;
+  allMessages: ChatMessage[];
+  read: boolean;
+  onOpenActions: () => void;
+  onJumpToReply: (id: string) => void;
 }) {
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startPress = () => {
+    pressTimer.current = setTimeout(onOpenActions, 450);
+  };
+  const cancelPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+  const repliedTo = message.reply_to_id ? allMessages.find((m) => m.id === message.reply_to_id) : null;
+
+  const reactionCounts = new Map<string, number>();
+  for (const r of message.reactions) reactionCounts.set(r.emoji, (reactionCounts.get(r.emoji) ?? 0) + 1);
+
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div id={`msg-${message.id}`} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
       <div
-        className={`max-w-[75%] rounded-3xl px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-line ${
+        onPointerDown={startPress}
+        onPointerUp={cancelPress}
+        onPointerLeave={cancelPress}
+        onContextMenu={(e) => e.preventDefault()}
+        className={`max-w-[75%] select-none rounded-3xl px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-line ${
           mine ? "grad-purple-blue text-white" : "chip text-ink"
         }`}
       >
-        {message.audio_url ? (
+        {message.forwarded && (
+          <p className={`mb-1 flex items-center gap-1 text-[10.5px] font-semibold ${mine ? "text-white/70" : "text-mist"}`}>
+            <Forward className="h-3 w-3" /> Forwarded
+          </p>
+        )}
+        {repliedTo && (
+          <button
+            onClick={() => onJumpToReply(repliedTo.id)}
+            className={`mb-1.5 block w-full truncate rounded-xl border-l-2 px-2 py-1 text-left text-[11.5px] ${
+              mine ? "border-white/50 bg-white/10 text-white/80" : "border-cyan-400 bg-white/5 text-mist"
+            }`}
+          >
+            {repliedTo.text ?? (repliedTo.audio_url ? "🎤 Voice message" : "🔒 Encrypted message")}
+          </button>
+        )}
+        {message.deleted_at ? (
+          <span className={`italic ${mine ? "text-white/60" : "text-mist"}`}>This message was deleted</span>
+        ) : message.audio_url ? (
           <VoiceMessageBubble url={message.audio_url} duration={message.audio_duration_seconds ?? 0} mine={mine} />
         ) : (
           <MessageText message={message} mine={mine} translateOn={translateOn} targetLang={targetLang} />
         )}
-        <div className={`mt-1 text-right text-[10px] ${mine ? "text-white/70" : "text-mist"}`}>
+        <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-mist"}`}>
+          {message.edited_at && !message.deleted_at && <span>edited ·</span>}
           {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {mine && (read ? <CheckCheck className="h-3.5 w-3.5 text-cyan-300" /> : <Check className="h-3.5 w-3.5" />)}
         </div>
       </div>
+      {reactionCounts.size > 0 && (
+        <div className="mt-1 flex gap-1">
+          {[...reactionCounts.entries()].map(([emoji, count]) => (
+            <span key={emoji} className="rounded-full chip px-1.5 py-0.5 text-[11px]">
+              {emoji} {count > 1 && count}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
