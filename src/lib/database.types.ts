@@ -480,6 +480,7 @@ export type Database = {
           story_id: string | null;
           story_preview_image_url: string | null;
           story_preview_text: string | null;
+          topic_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -511,6 +512,7 @@ export type Database = {
           story_id?: string | null;
           story_preview_image_url?: string | null;
           story_preview_text?: string | null;
+          topic_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -542,6 +544,7 @@ export type Database = {
           story_id?: string | null;
           story_preview_image_url?: string | null;
           story_preview_text?: string | null;
+          topic_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -863,6 +866,36 @@ export type Database = {
           group_id?: string;
           user_id?: string;
           banned_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      group_topics: {
+        Row: {
+          id: string;
+          group_id: string;
+          name: string;
+          icon: string;
+          created_by: string | null;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          name: string;
+          icon?: string;
+          created_by?: string | null;
+          position?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          group_id?: string;
+          name?: string;
+          icon?: string;
+          created_by?: string | null;
+          position?: number;
           created_at?: string;
         };
         Relationships: [];

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark } from "lucide-react";
+import { ArrowLeft, MoreVertical, Send, Loader2, LogOut, Lock, ShieldCheck, Pin, X, Check, Forward, Paperclip, Info, Bookmark, Plus } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { VoiceRecorder } from "../../components/VoiceRecorder";
 import { VoiceMessageBubble } from "../../components/VoiceMessageBubble";
@@ -12,6 +12,7 @@ import { ChatLocationBubble } from "../../components/ChatLocationBubble";
 import { ChatContactBubble } from "../../components/ChatContactBubble";
 import { ContactPickerSheet } from "../../components/ContactPickerSheet";
 import { AttachMenu } from "../../components/AttachMenu";
+import { CreateTopicSheet } from "../../components/CreateTopicSheet";
 import { useAuth, type Profile } from "../../context/AuthContext";
 import { gradientFor } from "../../lib/gradients";
 import {
@@ -53,9 +54,12 @@ import {
   subscribeToPollVotes,
   createTypingChannel,
   messagePreviewText,
+  listGroupTopics,
+  createGroupTopic,
   type ChatConversation,
   type ChatMessage,
   type Group,
+  type GroupTopic,
 } from "../../lib/api";
 import { ensureKeyPair, wrapGroupKey, unwrapGroupKey, generateGroupKey, encryptText, decryptText } from "../../lib/crypto";
 import { supabase } from "../../lib/supabase";
@@ -98,6 +102,9 @@ export function GroupChat() {
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [topics, setTopics] = useState<GroupTopic[]>([]);
+  const [activeTopic, setActiveTopic] = useState<string | null>(null);
+  const [topicSheetOpen, setTopicSheetOpen] = useState(false);
   const [readPointers, setReadPointers] = useState<{ user_id: string; last_read_at: string }[]>([]);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -109,6 +116,10 @@ export function GroupChat() {
 
   const pinnedMessage = messages?.find((m) => m.pinned && !m.deleted_at) ?? null;
   const visibleMessages = (messages ?? []).filter((m) => !hidden.has(m.id));
+  // undefined = this group has no topics, so every send/list call is
+  // topic-agnostic exactly as before this feature existed
+  const topicFilterId = topics.length > 0 ? activeTopic : undefined;
+  const canManageTopics = myRole === "owner" || myRole === "admin";
 
   useEffect(() => {
     if (!user) return;
@@ -124,6 +135,11 @@ export function GroupChat() {
     if (!id || !user) return;
     getMyGroupRole(id, user.id).then(setMyRole);
   }, [id, user]);
+
+  useEffect(() => {
+    if (!id) return;
+    listGroupTopics(id).then(setTopics).catch(() => setTopics([]));
+  }, [id]);
 
   useEffect(() => {
     if (!user) return;
@@ -173,7 +189,8 @@ export function GroupChat() {
   useEffect(() => {
     if (!group?.conversation_id || !user) return;
     const convId = group.conversation_id;
-    listMessages(convId).then(async (msgs) => {
+    setMessages(null);
+    listMessages(convId, topicFilterId).then(async (msgs) => {
       setMessages(msgs);
       const senderIds = [...new Set(msgs.map((m) => m.sender_id))];
       if (senderIds.length > 0) {
@@ -185,6 +202,9 @@ export function GroupChat() {
     markConversationRead(convId, user.id).catch(() => {});
 
     const unsubscribeInsert = subscribeToMessages(convId, (message) => {
+      // the realtime channel delivers every message in the conversation
+      // regardless of topic, so the currently-open topic filters here
+      if (topicFilterId !== undefined && message.topic_id !== topicFilterId) return;
       setMessages((prev) => (prev ? [...prev, message] : [message]));
       markConversationRead(convId, user.id).catch(() => {});
       setAuthors((prev) => {
@@ -206,13 +226,13 @@ export function GroupChat() {
       );
     });
     const unsubscribeReactions = subscribeToReactions(convId, () => {
-      listMessages(convId).then(setMessages);
+      listMessages(convId, topicFilterId).then(setMessages);
     });
     const unsubscribeReads = subscribeToReadReceipts(convId, () => {
       listReadPointers(convId).then(setReadPointers);
     });
     const unsubscribePolls = subscribeToPollVotes(convId, () => {
-      listMessages(convId).then(setMessages);
+      listMessages(convId, topicFilterId).then(setMessages);
     });
 
     return () => {
@@ -222,7 +242,7 @@ export function GroupChat() {
       unsubscribeReads();
       unsubscribePolls();
     };
-  }, [group?.conversation_id, user]);
+  }, [group?.conversation_id, user, topicFilterId]);
 
   useEffect(() => {
     if (!group?.conversation_id || !user) return;
@@ -302,21 +322,22 @@ export function GroupChat() {
     setInput("");
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
+    const topicId = topicFilterId;
     if (groupKey) {
       try {
         const { ciphertext, iv } = await encryptText(groupKey, text);
-        await sendEncryptedGroupMessage(convId, user.id, ciphertext, iv, replyToId);
+        await sendEncryptedGroupMessage(convId, user.id, ciphertext, iv, replyToId, topicId);
         return;
       } catch {
         // encryption failed unexpectedly — fall back to plaintext rather than losing the message
       }
     }
-    await sendMessage(convId, user.id, text, replyToId);
+    await sendMessage(convId, user.id, text, replyToId, topicId);
   };
 
   const handleSendVoice = async (audioUrl: string, durationSeconds: number) => {
     if (!group?.conversation_id || !user) return;
-    await sendVoiceMessage(group.conversation_id, user.id, audioUrl, durationSeconds, replyingTo?.id);
+    await sendVoiceMessage(group.conversation_id, user.id, audioUrl, durationSeconds, replyingTo?.id, topicFilterId);
     setReplyingTo(null);
   };
 
@@ -324,17 +345,18 @@ export function GroupChat() {
     if (!group?.conversation_id || !user) return;
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
-    await sendPollMessage(group.conversation_id, user.id, question, options, allowMultiple, replyToId);
+    await sendPollMessage(group.conversation_id, user.id, question, options, allowMultiple, replyToId, topicFilterId);
   };
 
   const handleSendLocation = () => {
     if (!group?.conversation_id || !user || !navigator.geolocation) return;
     const convId = group.conversation_id;
     const replyToId = replyingTo?.id;
+    const topicId = topicFilterId;
     setReplyingTo(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        sendLocationMessage(convId, user.id, pos.coords.latitude, pos.coords.longitude, undefined, replyToId).catch(() => {});
+        sendLocationMessage(convId, user.id, pos.coords.latitude, pos.coords.longitude, undefined, replyToId, topicId).catch(() => {});
       },
       () => {
         // location permission denied or unavailable — nothing sent, no partial message left behind
@@ -348,7 +370,7 @@ export function GroupChat() {
     if (!group?.conversation_id || !user) return;
     const replyToId = replyingTo?.id;
     setReplyingTo(null);
-    await sendContactMessage(group.conversation_id, user.id, contact.id, replyToId);
+    await sendContactMessage(group.conversation_id, user.id, contact.id, replyToId, topicFilterId);
   };
 
   const handleVote = async (message: ChatMessage, optionIds: string[]) => {
@@ -366,7 +388,7 @@ export function GroupChat() {
     try {
       await votePoll(poll.id, optionIds);
     } catch {
-      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+      if (group?.conversation_id) listMessages(group.conversation_id, topicFilterId).then(setMessages);
     }
   };
 
@@ -379,7 +401,7 @@ export function GroupChat() {
     try {
       await closePoll(pollId);
     } catch {
-      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+      if (group?.conversation_id) listMessages(group.conversation_id, topicFilterId).then(setMessages);
     }
   };
 
@@ -388,12 +410,13 @@ export function GroupChat() {
     const convId = group.conversation_id;
     setUploading(true);
     const replyToId = replyingTo?.id;
+    const topicId = topicFilterId;
     setReplyingTo(null);
     try {
       const url = await uploadChatFile(user.id, file);
-      if (file.type.startsWith("image/")) await sendImageMessage(convId, user.id, url, replyToId);
-      else if (file.type.startsWith("video/")) await sendVideoMessageFile(convId, user.id, url, replyToId);
-      else await sendFileMessage(convId, user.id, url, file.name, file.size, replyToId);
+      if (file.type.startsWith("image/")) await sendImageMessage(convId, user.id, url, replyToId, topicId);
+      else if (file.type.startsWith("video/")) await sendVideoMessageFile(convId, user.id, url, replyToId, topicId);
+      else await sendFileMessage(convId, user.id, url, file.name, file.size, replyToId, topicId);
     } catch {
       // upload failed — nothing was sent, no partial message left behind
     } finally {
@@ -452,7 +475,7 @@ export function GroupChat() {
     try {
       await toggleMessageReaction(message.id, convId, user.id, next, current);
     } catch {
-      listMessages(convId).then(setMessages);
+      listMessages(convId, topicFilterId).then(setMessages);
     }
   };
 
@@ -482,7 +505,7 @@ export function GroupChat() {
       if (mine) await deleteMessageForEveryone(message.id);
       else await adminDeleteGroupMessage(message.id);
     } catch {
-      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+      if (group?.conversation_id) listMessages(group.conversation_id, topicFilterId).then(setMessages);
     }
   };
 
@@ -493,7 +516,7 @@ export function GroupChat() {
     try {
       await pinMessage(convId, message.id);
     } catch {
-      listMessages(convId).then(setMessages);
+      listMessages(convId, topicFilterId).then(setMessages);
     }
   };
 
@@ -502,8 +525,15 @@ export function GroupChat() {
     try {
       await unpinMessage(message.id);
     } catch {
-      if (group?.conversation_id) listMessages(group.conversation_id).then(setMessages);
+      if (group?.conversation_id) listMessages(group.conversation_id, topicFilterId).then(setMessages);
     }
+  };
+
+  const handleCreateTopic = async (name: string, icon: string) => {
+    if (!id || !user) return;
+    const newTopicId = await createGroupTopic(id, user.id, name, icon);
+    await listGroupTopics(id).then(setTopics);
+    setActiveTopic(newTopicId);
   };
 
   const handleOpenForward = (message: ChatMessage) => {
@@ -568,6 +598,17 @@ export function GroupChat() {
               >
                 <Info className="h-4 w-4" /> Group info
               </button>
+              {canManageTopics && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setTopicSheetOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[13px] font-medium text-ink hover:bg-white/5"
+                >
+                  <Plus className="h-4 w-4" /> {topics.length > 0 ? "New topic" : "Create topics"}
+                </button>
+              )}
               {group && !group.encrypted && (
                 <button
                   onClick={handleEnableEncryption}
@@ -588,6 +629,38 @@ export function GroupChat() {
           )}
         </div>
       </header>
+
+      {topics.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-white/5 px-3 py-2">
+          <button
+            onClick={() => setActiveTopic(null)}
+            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium ${
+              activeTopic === null ? "grad-purple-blue text-white" : "chip text-mist"
+            }`}
+          >
+            General
+          </button>
+          {topics.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTopic(t.id)}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium ${
+                activeTopic === t.id ? "grad-purple-blue text-white" : "chip text-mist"
+              }`}
+            >
+              {t.icon} {t.name}
+            </button>
+          ))}
+          {canManageTopics && (
+            <button
+              onClick={() => setTopicSheetOpen(true)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full chip text-mist"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {pinnedMessage && (
         <button
@@ -795,6 +868,8 @@ export function GroupChat() {
       )}
 
       {pollComposerOpen && <CreatePollSheet onClose={() => setPollComposerOpen(false)} onCreate={handleCreatePoll} />}
+
+      {topicSheetOpen && <CreateTopicSheet onClose={() => setTopicSheetOpen(false)} onCreate={handleCreateTopic} />}
 
       {forwardMessageTarget && (
         <>

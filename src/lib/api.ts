@@ -938,6 +938,7 @@ export type ChatMessage = {
   story_id: string | null;
   story_preview_image_url: string | null;
   story_preview_text: string | null;
+  topic_id: string | null;
   created_at: string;
   reactions: MessageReaction[];
   poll: Poll | null;
@@ -969,12 +970,13 @@ export function messagePreviewText(
   return "";
 }
 
-export async function listMessages(conversationId: string): Promise<ChatMessage[]> {
-  const { data, error } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+export async function listMessages(conversationId: string, topicId?: string | null): Promise<ChatMessage[]> {
+  let query = supabase.from("messages").select("*").eq("conversation_id", conversationId);
+  // topicId omitted (undefined) = no filter, for conversations that don't
+  // use topics at all; null = the untitled "General" topic; a string = a
+  // specific named topic.
+  if (topicId !== undefined) query = topicId === null ? query.is("topic_id", null) : query.eq("topic_id", topicId);
+  const { data, error } = await query.order("created_at", { ascending: true });
   if (error) throw error;
   if (!data || data.length === 0) return [];
 
@@ -1036,18 +1038,38 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
   }));
 }
 
-export async function sendLocationMessage(conversationId: string, senderId: string, lat: number, lng: number, label?: string, replyToId?: string) {
-  const { error } = await supabase
-    .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, location_lat: lat, location_lng: lng, location_label: label ?? null, reply_to_id: replyToId ?? null });
+export async function sendLocationMessage(
+  conversationId: string,
+  senderId: string,
+  lat: number,
+  lng: number,
+  label?: string,
+  replyToId?: string,
+  topicId?: string | null
+) {
+  const { error } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: senderId,
+    location_lat: lat,
+    location_lng: lng,
+    location_label: label ?? null,
+    reply_to_id: replyToId ?? null,
+    topic_id: topicId ?? null,
+  });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "📍 Location").catch(() => {});
 }
 
-export async function sendContactMessage(conversationId: string, senderId: string, contactId: string, replyToId?: string) {
+export async function sendContactMessage(
+  conversationId: string,
+  senderId: string,
+  contactId: string,
+  replyToId?: string,
+  topicId?: string | null
+) {
   const { error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, shared_profile_id: contactId, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, shared_profile_id: contactId, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "👤 Contact").catch(() => {});
 }
@@ -1058,7 +1080,8 @@ export async function sendPollMessage(
   question: string,
   options: string[],
   allowMultiple: boolean,
-  replyToId?: string
+  replyToId?: string,
+  topicId?: string | null
 ) {
   const { data: pollId, error } = await supabase.rpc("create_poll", {
     p_conversation_id: conversationId,
@@ -1069,7 +1092,7 @@ export async function sendPollMessage(
   if (error) throw error;
   const { error: msgError } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, poll_id: pollId, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, poll_id: pollId, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (msgError) throw msgError;
   notifyConversationMembers(conversationId, senderId, `📊 ${question}`).catch(() => {});
 }
@@ -1098,10 +1121,10 @@ export function subscribeToPollVotes(conversationId: string, onChange: () => voi
   };
 }
 
-export async function sendMessage(conversationId: string, senderId: string, text: string, replyToId?: string) {
+export async function sendMessage(conversationId: string, senderId: string, text: string, replyToId?: string, topicId?: string | null) {
   const { error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, text, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, text, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, text).catch(() => {});
 }
@@ -1119,7 +1142,8 @@ export async function sendVoiceMessage(
   senderId: string,
   audioUrl: string,
   durationSeconds: number,
-  replyToId?: string
+  replyToId?: string,
+  topicId?: string | null
 ) {
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -1127,6 +1151,7 @@ export async function sendVoiceMessage(
     audio_url: audioUrl,
     audio_duration_seconds: durationSeconds,
     reply_to_id: replyToId ?? null,
+    topic_id: topicId ?? null,
   });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🎤 Voice message").catch(() => {});
@@ -1199,18 +1224,30 @@ export async function deleteMessageForEveryone(messageId: string) {
   if (error) throw error;
 }
 
-export async function sendImageMessage(conversationId: string, senderId: string, imageUrl: string, replyToId?: string) {
+export async function sendImageMessage(
+  conversationId: string,
+  senderId: string,
+  imageUrl: string,
+  replyToId?: string,
+  topicId?: string | null
+) {
   const { error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, image_url: imageUrl, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, image_url: imageUrl, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "📷 Photo").catch(() => {});
 }
 
-export async function sendVideoMessageFile(conversationId: string, senderId: string, videoUrl: string, replyToId?: string) {
+export async function sendVideoMessageFile(
+  conversationId: string,
+  senderId: string,
+  videoUrl: string,
+  replyToId?: string,
+  topicId?: string | null
+) {
   const { error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, video_url: videoUrl, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, video_url: videoUrl, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🎬 Video").catch(() => {});
 }
@@ -1221,7 +1258,8 @@ export async function sendFileMessage(
   fileUrl: string,
   fileName: string,
   fileSize: number,
-  replyToId?: string
+  replyToId?: string,
+  topicId?: string | null
 ) {
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
@@ -1230,6 +1268,7 @@ export async function sendFileMessage(
     file_name: fileName,
     file_size: fileSize,
     reply_to_id: replyToId ?? null,
+    topic_id: topicId ?? null,
   });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, `📄 ${fileName}`).catch(() => {});
@@ -1594,6 +1633,30 @@ export async function adminDeleteGroupMessage(messageId: string) {
   if (error) throw error;
 }
 
+// ---------- group topics ----------
+// Fully opt-in: a group with zero topics has no topic bar and every message
+// carries topic_id = null, same as before this feature existed.
+
+export type GroupTopic = { id: string; group_id: string; name: string; icon: string; created_by: string | null; position: number; created_at: string };
+
+export async function listGroupTopics(groupId: string): Promise<GroupTopic[]> {
+  const { data, error } = await supabase.from("group_topics").select("*").eq("group_id", groupId).order("position", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createGroupTopic(groupId: string, userId: string, name: string, icon: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from("group_topics").insert({ id, group_id: groupId, name, icon, created_by: userId });
+  if (error) throw error;
+  return id;
+}
+
+export async function deleteGroupTopic(topicId: string) {
+  const { error } = await supabase.from("group_topics").delete().eq("id", topicId);
+  if (error) throw error;
+}
+
 // ---------- channels ----------
 // A broadcast feed, not a chat: owner/admins post, subscribers view and
 // react/comment but can't post. No underlying conversation, unlike groups.
@@ -1858,11 +1921,12 @@ export async function sendEncryptedGroupMessage(
   senderId: string,
   ciphertext: string,
   iv: string,
-  replyToId?: string
+  replyToId?: string,
+  topicId?: string | null
 ) {
   const { error } = await supabase
     .from("messages")
-    .insert({ conversation_id: conversationId, sender_id: senderId, ciphertext, iv, reply_to_id: replyToId ?? null });
+    .insert({ conversation_id: conversationId, sender_id: senderId, ciphertext, iv, reply_to_id: replyToId ?? null, topic_id: topicId ?? null });
   if (error) throw error;
   notifyConversationMembers(conversationId, senderId, "🔒 New message").catch(() => {});
 }
