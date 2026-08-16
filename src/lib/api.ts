@@ -665,13 +665,19 @@ export async function getOrCreateConversationWith(userId: string, otherUserId: s
     .single();
   if (error || !conversation) throw error ?? new Error("Failed to create conversation");
 
-  const { error: memberError } = await supabase
+  const { error: selfMemberError } = await supabase
     .from("conversation_members")
-    .insert([
-      { conversation_id: conversation.id, user_id: userId },
-      { conversation_id: conversation.id, user_id: otherUserId },
-    ]);
-  if (memberError) throw memberError;
+    .insert({ conversation_id: conversation.id, user_id: userId });
+  if (selfMemberError) throw selfMemberError;
+
+  // Inserted as a separate statement after the row above: the "add another
+  // member to a conversation you're already in" RLS check needs the self
+  // membership to already be committed, which a single batched insert can't
+  // see (both rows are evaluated against the same pre-insert snapshot).
+  const { error: otherMemberError } = await supabase
+    .from("conversation_members")
+    .insert({ conversation_id: conversation.id, user_id: otherUserId });
+  if (otherMemberError) throw otherMemberError;
 
   return conversation.id;
 }
@@ -799,6 +805,11 @@ export async function listNotifications(userId: string): Promise<NotificationRow
 
 export async function markAllNotificationsRead(userId: string) {
   const { error } = await supabase.from("notifications").update({ read: true }).eq("user_id", userId).eq("read", false);
+  if (error) throw error;
+}
+
+export async function deleteNotification(notificationId: string) {
+  const { error } = await supabase.from("notifications").delete().eq("id", notificationId);
   if (error) throw error;
 }
 

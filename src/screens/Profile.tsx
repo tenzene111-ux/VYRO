@@ -61,6 +61,7 @@ export function Profile() {
   const [likedPosts, setLikedPosts] = useState<FeedPost[] | null>(null);
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
+  const [followsMe, setFollowsMe] = useState(false);
   const [tab, setTab] = useState("posts");
   const [editing, setEditing] = useState(false);
   const [gifting, setGifting] = useState(false);
@@ -79,7 +80,10 @@ export function Profile() {
     Promise.all([countPosts(targetId), countFollowers(targetId), countFollowing(targetId)]).then(
       ([p, followers, followingCount]) => setStats({ posts: p, followers, following: followingCount })
     );
-    if (!isMe && user) isFollowing(user.id, targetId).then(setFollowing);
+    if (!isMe && user) {
+      isFollowing(user.id, targetId).then(setFollowing);
+      isFollowing(targetId, user.id).then(setFollowsMe);
+    }
   }, [targetId, isMe, user]);
 
   useEffect(() => {
@@ -185,7 +189,7 @@ export function Profile() {
                 following ? "chip text-ink" : "grad-purple-blue text-white glow-violet"
               }`}
             >
-              {following ? "Following" : "Follow"}
+              {following ? "Following" : followsMe ? "Follow Back" : "Follow"}
             </button>
             <button onClick={handleMessage} className="flex-1 rounded-full chip py-2.5 text-sm font-semibold text-ink">
               Message

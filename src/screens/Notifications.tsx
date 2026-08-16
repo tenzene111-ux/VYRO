@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageSquare, UserPlus, Gift, Loader2 } from "lucide-react";
+import { Heart, MessageSquare, UserPlus, Gift, Loader2, X } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { useAuth } from "../context/AuthContext";
-import { listNotifications, markAllNotificationsRead, subscribeToNotifications, type NotificationRow } from "../lib/api";
+import {
+  deleteNotification,
+  listFollowing,
+  listNotifications,
+  markAllNotificationsRead,
+  subscribeToNotifications,
+  toggleFollow,
+  type NotificationRow,
+} from "../lib/api";
 
 const iconFor: Record<string, typeof Heart> = {
   like: Heart,
@@ -30,16 +38,48 @@ export function Notifications() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationRow[] | null>(null);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) return;
     listNotifications(user.id).then(setNotifications);
+    listFollowing(user.id).then(setFollowingIds);
     markAllNotificationsRead(user.id);
     const unsubscribe = subscribeToNotifications(user.id, () => {
       listNotifications(user.id).then(setNotifications);
     });
     return unsubscribe;
   }, [user]);
+
+  const handleFollowBack = async (actorId: string) => {
+    if (!user) return;
+    const alreadyFollowing = followingIds.has(actorId);
+    setFollowingIds((prev) => {
+      const next = new Set(prev);
+      if (alreadyFollowing) next.delete(actorId);
+      else next.add(actorId);
+      return next;
+    });
+    try {
+      await toggleFollow(user.id, actorId, alreadyFollowing);
+    } catch {
+      setFollowingIds((prev) => {
+        const next = new Set(prev);
+        if (alreadyFollowing) next.add(actorId);
+        else next.delete(actorId);
+        return next;
+      });
+    }
+  };
+
+  const handleIgnore = async (notificationId: string) => {
+    setNotifications((prev) => (prev ? prev.filter((n) => n.id !== notificationId) : prev));
+    try {
+      await deleteNotification(notificationId);
+    } catch {
+      // notification stays dismissed locally even if the delete failed
+    }
+  };
 
   return (
     <div className="safe-top">
@@ -66,8 +106,26 @@ export function Notifications() {
             const earlier = notifications.filter((n) => new Date(n.created_at).getTime() < cutoff);
             return (
               <>
-                {fresh.length > 0 && <NotificationGroup label="New" items={fresh} onOpen={navigate} />}
-                {earlier.length > 0 && <NotificationGroup label="Earlier" items={earlier} onOpen={navigate} />}
+                {fresh.length > 0 && (
+                  <NotificationGroup
+                    label="New"
+                    items={fresh}
+                    onOpen={navigate}
+                    followingIds={followingIds}
+                    onFollowBack={handleFollowBack}
+                    onIgnore={handleIgnore}
+                  />
+                )}
+                {earlier.length > 0 && (
+                  <NotificationGroup
+                    label="Earlier"
+                    items={earlier}
+                    onOpen={navigate}
+                    followingIds={followingIds}
+                    onFollowBack={handleFollowBack}
+                    onIgnore={handleIgnore}
+                  />
+                )}
               </>
             );
           })()}
@@ -81,21 +139,29 @@ function NotificationGroup({
   label,
   items,
   onOpen,
+  followingIds,
+  onFollowBack,
+  onIgnore,
 }: {
   label: string;
   items: NotificationRow[];
   onOpen: (path: string) => void;
+  followingIds: Set<string>;
+  onFollowBack: (actorId: string) => void;
+  onIgnore: (notificationId: string) => void;
 }) {
   return (
     <div className="mb-2">
       <p className="px-3 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-mist">{label}</p>
       {items.map((n) => {
         const Icon = iconFor[n.type] ?? Heart;
+        const isFollow = n.type === "follow" && !!n.actor;
+        const followingBack = isFollow && followingIds.has(n.actor!.id);
         return (
-          <button
+          <div
             key={n.id}
             onClick={() => n.actor && onOpen(`/profile/${n.actor.id}`)}
-            className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.03] ${
+            className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.03] ${
               !n.read ? "bg-violet-500/[0.06]" : ""
             }`}
           >
@@ -111,11 +177,31 @@ function NotificationGroup({
               <span className="font-semibold text-ink">{n.actor?.name ?? "Someone"} </span>
               {textFor[n.type] ?? "sent you a notification"}
             </p>
-            <div className="flex flex-col items-end gap-1.5">
-              <span className="text-[11px] text-mist">{timeAgo(n.created_at)}</span>
-              {!n.read && <span className="h-2 w-2 rounded-full bg-cyan-400" />}
-            </div>
-          </button>
+            {isFollow ? (
+              <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => onFollowBack(n.actor!.id)}
+                  className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+                    followingBack ? "chip text-ink" : "grad-purple-blue text-white"
+                  }`}
+                >
+                  {followingBack ? "Following" : "Follow Back"}
+                </button>
+                <button
+                  onClick={() => onIgnore(n.id)}
+                  className="rounded-full p-1.5 text-mist hover:bg-white/5 hover:text-ink"
+                  aria-label="Ignore"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <span className="text-[11px] text-mist">{timeAgo(n.created_at)}</span>
+                {!n.read && <span className="h-2 w-2 rounded-full bg-cyan-400" />}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
